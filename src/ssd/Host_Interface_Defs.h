@@ -5,7 +5,7 @@
 #include <string>
 #include "Host_Interface_NVMe_Priorities.h"
 
-enum class HostInterface_Types { SATA, NVME };
+enum class HostInterface_Types { SATA, NVME, UFS };
 
 #define NVME_FLUSH_OPCODE 0x0000
 #define NVME_WRITE_OPCODE 0x0001
@@ -13,6 +13,10 @@ enum class HostInterface_Types { SATA, NVME };
 
 #define SATA_WRITE_OPCODE 0x0001
 #define SATA_READ_OPCODE 0x0002
+
+//SCSI opcodes carried in the UFS Command UPIU's CDB (JESD220G clause 11)
+#define UFS_READ_OPCODE 0x28  //SCSI READ(10)
+#define UFS_WRITE_OPCODE 0x2A //SCSI WRITE(10)
 
 const uint64_t NCQ_SUBMISSION_REGISTER = 0x1000;
 const uint64_t NCQ_COMPLETION_REGISTER = 0x1003;
@@ -58,6 +62,97 @@ struct Submission_Queue_Entry
 	uint64_t PRP_entry_1;
 	uint64_t PRP_entry_2;
 	uint32_t Command_specific[6];
+};
+
+//======================= UFS (MCQ mode, UFSHCI 4.1/5.0) =======================
+//See ufs-design.md for the full design. UFS registers are in their own block at
+//0x2000, deliberately disjoint from NVMe's 0x1000 block above. Doorbell values are
+//slot indices (the spec's DWord-offset encoding and SQDAOy/CQDAOy indirection are
+//abstracted away as timing-neutral, ufs-design.md section 1.1).
+
+const uint64_t UFS_DOORBELL_BLOCK_BASE = 0x2000;
+const uint64_t UFS_DOORBELL_QUEUE_STRIDE = 0x10;
+#define UFS_SQ_TAIL_DOORBELL(Q) (UFS_DOORBELL_BLOCK_BASE + (Q) * UFS_DOORBELL_QUEUE_STRIDE)
+#define UFS_CQ_HEAD_DOORBELL(C) (UFS_DOORBELL_BLOCK_BASE + 0x8 + (C) * UFS_DOORBELL_QUEUE_STRIDE)
+
+//MCQConfig.AS analogue (JESD223F 5.9.2): no weighted-round-robin exists in UFS
+enum class UFS_Arbitration_Type { ROUND_ROBIN, STRICT_PRIORITY };
+
+//UTP Transfer Request Descriptor = MCQ SQ entry, 8 DWORDs (JESD223F 6.1.1/6.2.1).
+//DW1/DW3 crypto fields are carried for layout fidelity, never interpreted.
+struct UTP_Transfer_Request_Descriptor
+{
+	uint32_t DW0_Header;         //Command Type (31:28), DD (26:25), I (24), CCI (7:0)
+	uint32_t DW1_DUN_Lower;
+	uint32_t DW2_OCS;            //unused in MCQ mode (OCS is in the CQ entry), holds 0x0F (invalid)
+	uint32_t DW3_DUN_Upper;
+	uint32_t DW4_UCD_Base_Lower;
+	uint32_t DW5_UCD_Base_Upper;
+	uint32_t DW6_Response_UPIU;  //offset (31:16), length (15:0), in DWords
+	uint32_t DW7_PRDT;           //offset (31:16), length in entries (15:0)
+};
+
+//MCQ Completion Queue entry, 8 DWORDs (JESD223F 6.2.2, Figure 14)
+struct UFS_Completion_Queue_Entry
+{
+	uint32_t DW0;                //UCDLBA (31:7) | SQID (4:0)
+	uint32_t DW1;                //UCD base upper
+	uint32_t DW2;                //Response UPIU offset (31:16) | length (15:0)
+	uint32_t DW3;                //PRDT offset (31:16) | length (15:0)
+	uint32_t DW4;                //Extended Error Code (15:8) | OCS (7:0)
+	uint32_t DW5;                //EXT_IID (23:20) | IID (19:16) | LUN (15:8) | Task Tag (7:0)
+	uint32_t DW6_Reserved;
+	uint32_t DW7_Reserved;
+};
+
+//Command UPIU, 32 bytes fixed (JESD220G Table 10.13): 12-byte basic header +
+//Expected Data Transfer Length + 16-byte CDB inline. Only Transaction_Type, LUN,
+//Task_Tag, Expected_Data_Transfer_Length and the CDB opcode/LBA/length are ever
+//interpreted by the simulator (ufs-design.md section 2.3).
+struct UFS_Command_UPIU
+{
+	uint8_t Transaction_Type;
+	uint8_t Flags;
+	uint8_t LUN;
+	uint8_t Task_Tag;
+	uint8_t IID_Command_Set_Type;
+	uint8_t Reserved0;
+	uint8_t Reserved1;
+	uint8_t Reserved2;
+	uint8_t Total_EHS_Length;
+	uint8_t Reserved3;
+	uint16_t Data_Segment_Length;
+	uint32_t Expected_Data_Transfer_Length;
+	uint8_t CDB[16];
+};
+
+//Response UPIU, 32 bytes (JESD220G 10.7.2), written back to the UCD response
+//region on completion so its link cost is modeled (ufs-design.md section 3 step 7)
+struct UFS_Response_UPIU
+{
+	uint8_t Transaction_Type;
+	uint8_t Flags;
+	uint8_t LUN;
+	uint8_t Task_Tag;
+	uint8_t IID_Command_Set_Type;
+	uint8_t Reserved0;
+	uint8_t Response;
+	uint8_t Status;
+	uint8_t Total_EHS_Length;
+	uint8_t Device_Information;
+	uint16_t Data_Segment_Length;
+	uint32_t Residual_Transfer_Count;
+	uint8_t Reserved[16];
+};
+
+//PRDT entry, 4 DWORDs (JESD223F 6.1), one entry per request with dummy data
+//addresses, mirroring NVMe's dummy PRP pointers (ufs-design.md section 2.3)
+struct UFS_PRDT_Entry
+{
+	uint32_t Data_Base_Address;
+	uint32_t Data_Base_Address_Upper;
+	uint32_t Reserved;
+	uint32_t Data_Byte_Count;    //bits 17:0, 0's based, max 256 KB per segment
 };
 
 #endif // !NVME_DEFINISIONS_H

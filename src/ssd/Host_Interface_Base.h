@@ -47,6 +47,7 @@ namespace SSD_Components
 		friend class Request_Fetch_Unit_Base;
 		friend class Request_Fetch_Unit_NVMe;
 		friend class Request_Fetch_Unit_SATA;
+		friend class Request_Fetch_Unit_UFS;
 	public:
 		Input_Stream_Manager_Base(Host_Interface_Base* host_interface);
 		virtual ~Input_Stream_Manager_Base();
@@ -94,9 +95,11 @@ namespace SSD_Components
 		friend class Input_Stream_Manager_Base;
 		friend class Input_Stream_Manager_NVMe;
 		friend class Input_Stream_Manager_SATA;
+		friend class Input_Stream_Manager_UFS;
 		friend class Request_Fetch_Unit_Base;
 		friend class Request_Fetch_Unit_NVMe;
 		friend class Request_Fetch_Unit_SATA;
+		friend class Request_Fetch_Unit_UFS;
 	public:
 		Host_Interface_Base(const sim_object_id_type& id, HostInterface_Types type, LHA_type max_logical_sector_address, 
 			unsigned int sectors_per_page, Data_Cache_Manager_Base* cache);
