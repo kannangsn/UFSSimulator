@@ -6,7 +6,8 @@
 - Baseline reference (original plan): JEDEC JESD220 (UFS 1.0/1.1 base architecture, 2011), plus web-search summaries of UFS 4.1/5.0 deltas
 - **Reference (2026-07-16 revision): the actual current specs.** JESD220G (UFS 4.1 device/transport spec, Dec 2024), JESD220H (UFS 5.0 device/transport spec), and JESD223F (UFSHCI 4.1 host-controller-interface spec, Jan 2025, the document that actually defines MCQ/doorbell/UTRD. This was **not** covered by JESD220 at all and had to be sourced separately).
 - **Reference (2026-07-17 revision): JESD223G (UFSHCI 5.0)** added, closing the one remaining gap from the previous revision. See §4 and §5.
-- Prepared: 2026-07-15. Revised: 2026-07-16 (real 4.1/5.0 specs). **Revised: 2026-07-17** (UFSHCI 5.0 spec, resolved the legacy-versus-MCQ open decision).
+- **Code-verification review (2026-07-17, second round):** every code-specific assumption (file paths, line numbers, branch points, NVMe queue mechanics) was verified against this repo's actual source, and spec-specific numbers were re-checked against spec. Three substantive corrections came out of it, all incorporated below. (a) The host-side topology decision (UFS_HBA adapter versus extending `IO_Flow_Base`) had been dropped from earlier revisions and is now restored and resolved in favor of a UFS_HBA (§5). (b) MQSim has **no** interrupt-coalescing code to adapt, that must be built fresh (§7 Day 7). (c) `IO_Flow_Base.cpp` and `Host_Parameter_Set` were missing from the config-integration inventory (§6).
+- Prepared: 2026-07-15. Revised: 2026-07-16 (real 4.1/5.0 specs). **Revised: 2026-07-17** (UFSHCI 5.0 spec, resolved the legacy-versus-MCQ open decision, and a code-verification review).
 
 ## Scope decisions
 
@@ -130,7 +131,9 @@ JESD223G's own Annex A.1 changelog ("Differences between JESD223G and JESD223F")
 - **HS-Gear6 device support is explicitly mandatory** in JESD220H §8.4 ("a UFS device shall support... HS-GEAR6"). No equivalent explicit host-mandate sentence was found. Flagged as worth double-checking if host-side gear negotiation is modeled.
 - **No line-coding/protocol efficiency percentage is stated in either spec** (only a generic "8b10b line coding per M-PHY" mention, no gear-specific number). If the simulator needs an effective-throughput-versus-raw-PHY-rate constant, that must be sourced from the MIPI M-PHY spec (not available yet) or treated as an explicit, documented assumption. Do not silently bake in an 80%-efficiency guess.
 
-## 5. Legacy-versus-MCQ decision, resolved 2026-07-17
+## 5. Resolved architecture decisions
+
+### 5.1 Legacy-versus-MCQ, resolved 2026-07-17
 
 **Decision: implement MCQ directly for the UFS 4.1 target. Legacy single-doorbell mode is not built.**
 
@@ -141,50 +144,63 @@ This closes the open decision carried since the 2026-07-15 plan. Reasoning:
 - The SQ entry format is a straight reuse of the legacy UTRD struct (§2.3, §2.4) regardless of which mode is built, so no design knowledge from the legacy exploration is lost. It's documented in §2.3 for reference even though unimplemented.
 - Net effect on the day-by-day plan (§7): the former "Phase B, Single-queue UTP baseline" is removed. Its still-needed pieces (command-descriptor struct, command fetch/parse, completion path, config/transport integration) are combined directly into the MCQ implementation phase instead of being built twice.
 
+### 5.2 Host-side topology, resolved 2026-07-17 (code review)
+
+The original 2026-07-15 plan posed this as an open choice, a SATA-style separate adapter versus an NVMe-style extension of the shared flow base. It was accidentally dropped from the 2026-07-16 rewrite. The code-verification review restored and resolved it. **Build a `UFS_HBA` (mirroring `SATA_HBA`) that owns all SQ/CQ rings, with IO flows routing requests through it.** Grounds, from the actual code:
+
+- `IO_Flow_Base` fixes **one queue pair per flow**: its constructor maps `io_queue_id` 1..8 to register/memory constants through eight literal `case` blocks ([IO_Flow_Base.cpp:47-107](src/host/IO_Flow_Base.cpp#L47-L107)), with queue id 0 reserved for the NVMe admin queue. Extending that pattern to MCQ's 32 queues means 32 hand-written cases plus new register constants, a rewrite of the mapping anyway.
+- MCQ **decouples queue count from flow count** and permits N:1 SQ-to-CQ mapping (§2.4). A per-flow queue-pair struct cannot represent a CQ shared by several SQs. An HBA that owns the rings can, and even in pure 1:1 configs it keeps queue topology a device-config matter instead of a workload-definition side effect.
+- The in-tree precedent works. `SATA_HBA` owns the NCQ ring and command-id pool, and exposes `Submit_io_request`/`SATA_consume_io_request`/`Read_ncq_entry`. `IO_Flow_Base::Submit_io_request`'s SATA branch is two lines of routing ([IO_Flow_Base.cpp:426-429](src/host/IO_Flow_Base.cpp#L426-L429)), and `PCIe_Root_Complex` already carries an HBA pointer to dispatch to. UFS gets the same shape with N rings instead of one.
+- `SATA_HBA` also carries an `hba_processing_delay` parameter (`SATA_Processing_Delay` in `Host_Parameter_Set`). That's the natural template for a `UFS_Processing_Delay` covering UTP/UniPro stack latency, exactly the kind of constant §8 says will need to be an explicit assumption.
+
+Consequence: the `IO_Flow_Base` changes shrink to SATA-sized routing branches. The 8-queue hardcodes (register constants 0-8 in `Host_Interface_Defs.h`, the `case 1..8` blocks, the `FLOW_ID_TO_Q_ID`/`QUEUE_ID_TO_FLOW_ID` macros) are sidestepped rather than extended. UFS defines its own register block owned by the HBA/host-interface pair.
+
 ## 6. Concrete Gap Analysis
 
 | Area | Files | Change |
 |---|---|---|
 | **Protocol enum & constants** | `src/ssd/Host_Interface_Defs.h` | Add `UFS` to `HostInterface_Types` enum. Add UFS register constants in their own address block. **Not** aliased onto NVMe's, since UFS's doorbell addressing (indirect `SQDAOy`/`CQDAOy` pointers, DWord-offset semantics) is structurally different from NVMe's fixed-stride slot-index doorbells (§2.4). |
-| **New host interface** | new: `src/ssd/Host_Interface_UFS.h/.cpp` | Subclass `Host_Interface_Base`. Command descriptor is the 32-byte UTRD (§2.3), used directly as MCQ's SQ entry format (§2.4). No legacy mode is built, so this struct only ever operates inside a circular-queue container. New 32-byte CQ-entry struct needed for completions (§2.4), MCQ-specific, no legacy equivalent exists to reuse. |
-| **Stream/fetch collaborators** | new: `Input_Stream_UFS`, `Request_Fetch_Unit_UFS` | Reuse `segment_user_request`. Protocol-neutral, needs no new logic beyond connecting the pieces. |
-| **Transport dispatch** | `src/host/PCIe_Root_Complex.cpp` (~L9-71) | Add a UFS branch to the `SSD_device_type` switch. Given MCQ's queue-count ceiling (32, versus NVMe's 8) and its own arbitration scheme (plain round-robin or flat 8-level strict priority, simpler than NVMe's weighted URGENT/HIGH/MEDIUM/LOW, §2.4), a UFS-specific arbitration path is warranted rather than reusing NVMe's weighted-round-robin code as-is. |
-| **Config integration (5+ sites)** | `src/exec/Device_Parameter_Set.cpp/.h`, `src/exec/SSD_Device.cpp` (~L200-262, 351-365), `src/exec/Host_System.cpp` (L17-21, 36-43, 83-86, 94-96, 116-130), `src/utils/Logical_Address_Partitioning_Unit.cpp` | Every site does an exhaustive switch/if over the closed 2-value enum. Each needs a third case. Several fall through silently on an unmatched case instead of reporting error, so a missed site fails quietly rather than loudly. Check each one manually. |
-| **Build system** | `MQSim.vcxproj` / `MQSim.vcxproj.filters` | Mechanical copy-paste of the NVMe/SATA `<ClCompile>`/`<ClInclude>` entries. Makefile globs automatically, no manual registration needed there. |
-| **Cleanup** (noted while analysing this code) | `src/exec/Host_System.cpp` L17, L83 | Two places cast `ssd_host_interface` to `Host_Interface_NVMe*` purely to call the shared base's `GetType()`. Fragile now that a third subtype exists. |
+| **New host interface** | new: `src/ssd/Host_Interface_UFS.h/.cpp` | Subclass `Host_Interface_Base`. Command descriptor is the 32-byte UTRD (§2.3), used directly as MCQ's SQ entry format (§2.4). No legacy mode is built, so this struct only ever operates inside a circular-queue container. New 32-byte CQ-entry struct needed for completions (§2.4). **Caution when copying the NVMe request-teardown pattern**: the `DELETE_REQUEST_NVME` macro in [Host_Interface_Base.h:22](src/ssd/Host_Interface_Base.h#L22) deletes `IO_command_info` through a `Submission_Queue_Entry*` cast. UFS needs its own macro casting to the UTRD type, or a naive copy deletes through the wrong type. |
+| **Host-side HBA** | new: `src/host/UFS_HBA.h/.cpp` | Adapter owning all SQ/CQ rings, per §5.2. Modeled on `SATA_HBA` (ring struct, command-id/task-tag pool, processing-delay parameter), generalized from one NCQ ring to up to 32 SQ/CQ rings with a per-SQ CQID map. |
+| **Stream/fetch collaborators** | new: `Input_Stream_UFS`, `Request_Fetch_Unit_UFS` | Follow the NVMe pattern (per-stream state and fetch unit). `segment_user_request` logic is protocol-neutral. |
+| **Transport dispatch** | `src/host/PCIe_Root_Complex.cpp` (~L9-71) | Add a UFS branch to both `SSD_device_type` switches, dispatching to the UFS_HBA. Two verified details: `Read_from_memory` hardcodes `sizeof(Submission_Queue_Entry)` as the DMA payload size in both existing branches ([PCIe_Root_Complex.cpp:60-65](src/host/PCIe_Root_Complex.cpp#L60-L65)). The UFS branch must use its own descriptor size (UTRD is 32 bytes, NVMe's SQE is 64). Unlike `Write_to_memory`, `Read_from_memory`'s switch has **no default-error case**, so a missing UFS case causes the switch to fall through without writing to the payload buffer, leaving its memory uninitialized instead of triggering an explicit error. |
+| **Config integration (6+ locations)** | `src/exec/Device_Parameter_Set.cpp/.h` (enum parse L399-401, XML echo L74-80), `src/exec/SSD_Device.cpp` (~L200-262, 351-365), `src/exec/Host_System.cpp` (L17-21, 36-43, 83-86, 94-96, 116-130), `src/utils/Logical_Address_Partitioning_Unit.cpp` (7 switches), `src/host/IO_Flow_Base.cpp` (ctor L28-111, dtor L123-135, `Submit_io_request` L405-431, **missing from earlier revisions of this plan**), `src/exec/Host_Parameter_Set.cpp/.h` (new UFS params: gear/lane config, `UFS_Processing_Delay` alongside the existing `SATA_Processing_Delay`) | Every instance does an exhaustive switch/if over the closed 2-value enum. Each needs a third case. Several fall through silently on an unmatched case instead of reporting error (verified, for example `PCIe_Root_Complex::Read_from_memory` and the `Host_System.cpp` L36 switch), so a missed location executes no case body for the UFS value, leaving that code path silently unhandled instead of raising an error. Check each one manually. With the UFS_HBA (§5.2), the `IO_Flow_Base` cases stay SATA-sized (routing only). |
+| **Link timing** | `src/host/PCIe_Link.h/.cpp` | The link model is fully parameterized: `lane_bandwidth_GBPs`, `lane_count`, plus per-packet overhead bytes (TLP header 20B, DLLP 6B, PH 2B defaults), fed from `Host_Parameter_Set` ([Host_System.cpp:22](src/exec/Host_System.cpp#L22)). UFS reuses this structure with HS-Gear per-lane rates (for example HS-G5 Rate-B 23347.2 Mbps, about 2.92 GB/s per lane), lane count 1-2, and UniPro/M-PHY-scale packet overheads in place of the PCIe TLP/DLLP constants. This is parameter substitution, not a new link class. |
+| **Build system** | `MQSim.vcxproj` / `MQSim.vcxproj.filters` | Mechanical copy-paste of the NVMe/SATA `<ClCompile>`/`<ClInclude>` entries. The Makefile globs `src/{host,ssd,exec,...}/*.cpp` automatically, verified, no manual registration needed there. |
+| **Cleanup** (noted while analysing this code) | `src/exec/Host_System.cpp` | L17 and L83 cast `ssd_host_interface` to `Host_Interface_NVMe*` merely to call the base's `GetType()`. Fragile with a third subtype. Note the *other* casts there (L36-39 `Get_submission_queue_depth`/`Get_completion_queue_depth`, L119 `Create_new_stream`) are genuine NVMe-typed calls, not cleanup targets. The UFS branch adds its own equivalents. |
 
 ## 7. Day-by-Day Plan (~15 working days, +2 day buffer), restructured 2026-07-17 around MCQ-direct
 
 ### Phase A: Design (Days 1-3)
 
 **Day 1: Register and descriptor design**
-Design directly in MCQ terms (§2.4): the 32-byte UTRD reused as the SQ entry, the new 32-byte CQ-entry struct, `SQATTRy`/`CQATTRy`-style per-queue config fields (size, base address, `CQID` mapping for N:1 support), and the `SQDAOy`/`CQDAOy` doorbell-indirection addressing scheme. Decide queue count/depth ceilings for the simulator (spec allows up to 32 queues times 8192 slots, decide what subset is actually useful to expose as config knobs versus hardcoded).
+Design directly in MCQ terms (§2.4): the 32-byte UTRD reused as the SQ entry, the new 32-byte CQ-entry struct, and per-queue config (size, base address, `CQID` mapping for N:1 support). **Register addressing: allocate a flat UFS register block with fixed per-queue head/tail doorbell addresses**, the way MQSim already invents its own MMIO map for NVMe (0x1000-stride constants). The spec's `SQDAOy`/`CQDAOy` indirection and DWord-offset pointer encoding are hardware-discoverability details with zero timing content. Abstract them away and document that. Model ring buffer semantics faithfully instead (head==tail empty, one reserved slot, §2.4). Decide queue count/depth ceilings for the simulator (spec allows up to 32 queues times 8192 slots, decide what subset is exposed as config knobs versus hardcoded).
 
 **Day 2: Class skeletons**
-Write header-only skeletons for `Host_Interface_UFS`, `Input_Stream_UFS`, `Request_Fetch_Unit_UFS`, and the transport HBA, following the NVMe/SATA pattern. Stub all methods. Confirm it compiles alongside the existing NVMe/SATA code.
+Write header-only skeletons for `Host_Interface_UFS`, `Input_Stream_UFS`, `Request_Fetch_Unit_UFS`, and `UFS_HBA` (§5.2), following the NVMe/SATA pattern. Stub all methods. Confirm it compiles alongside the existing NVMe/SATA code.
 
 **Day 3: Enum adaptation and regression baseline**
-Add `UFS` to `HostInterface_Types` and touch all 5+ switch sites with placeholder cases. Run the existing NVMe/SATA configs to confirm no regression before any real UFS logic is added.
+Add `UFS` to `HostInterface_Types` and touch all 5+ branch points with placeholder cases. Run the existing NVMe/SATA configs to confirm no regression before any real UFS logic is added.
 
 ### Phase B: MCQ / UFS 4.1 (Days 4-11)
 
-**Day 4: MCQ queue structures**
-Implement the SQ (reused UTRD) and CQ-entry structs, plus per-queue config (size, base address, CQID mapping for N:1). Support up to 32 SQ/CQ pairs, 4x NVMe's current 8-pair ceiling, so check any place MQSim hardcodes an 8-queue assumption.
+**Day 4: MCQ queue structures and UFS_HBA implementation**
+Implement the SQ (reused UTRD) and CQ-entry structs inside `UFS_HBA`'s ring-buffer-ownership model (§5.2), plus per-queue config (size, base address, CQID mapping for N:1). Supporting up to 32 SQ/CQ pairs is contained inside the HBA. The 8-queue hardcodes in `IO_Flow_Base`/`Host_Interface_Defs.h` are sidestepped, not extended (§5.2). The flow-related change is a SATA-style routing branch.
 
-**Day 5: Doorbell indirection and arbitration**
-Implement per-queue head/tail pointer doorbells with DWord-offset semantics via the `SQDAOy`/`CQDAOy` indirection scheme (§2.4). Implement arbitration: plain round-robin or flat 8-level strict priority (`SQPL`), simpler than NVMe's weighted-round-robin/priority-class scheme.
+**Day 5: Doorbells and arbitration**
+Implement per-queue head/tail doorbell registers on the flat UFS register block (Day 1) with faithful ring buffer semantics. Implement arbitration in `Host_Interface_UFS`: plain round-robin or flat 8-level strict priority (`SQPL`), simpler than NVMe's weighted-round-robin/priority-class scheme. Note the backend pairing: MQSim's flash-related priority TSU (`TSU_Priority_OutOfOrder`) is built around the 4-level URGENT/HIGH/MEDIUM/LOW weighted classes. For UFS runs, pair with the non-priority `TSU_OutofOrder` and keep arbitration at the host-interface level, rather than force-mapping SQPL's 8 levels onto 4 weighted classes.
 
 **Day 6: Command fetch to User_Request**
 Implement command fetch and parsing into `User_Request` (LBA/length extraction only). Account for UPIU header overhead as fixed added latency: 32-byte COMMAND UPIU, 24-byte DATA IN/OUT header (§2.1), exact spec numbers, not estimates.
 
 **Day 7: Completion path and interrupt aggregation**
-Connect the completion path: CQ-entry write-back (OCS is in the CQ entry in MCQ mode, not a UTRD field, §2.4), doorbell/pointer update, interrupt. Implement count-based (`IACTH`) and timeout-based (`IATOVAL`) completion-interrupt coalescing, grouped via Interrupt Aggregation Groups, mechanically close enough to NVMe's existing interrupt-coalescing logic to adapt.
+Connect the completion path: CQ-entry write-back (OCS is in the CQ entry in MCQ mode, not a UTRD field, §2.4), doorbell/pointer update, interrupt. Implement count-based (`IACTH`) and timeout-based (`IATOVAL`) completion-interrupt coalescing, grouped via Interrupt Aggregation Groups. **Correction from the code review: MQSim models no interrupt coalescing anywhere. NVMe completions are delivered immediately, one CQE per `Write_to_memory` call, so this is built fresh, not adapted.** It's still small (a per-group counter plus a timeout event on the existing simulator event engine), but there is no in-tree reference implementation, contrary to what an earlier revision of this plan assumed.
 
 **Day 8: Config and transport integration**
-Finish XML config parsing (`Host_Interface_Type=UFS`) and the real switch-case logic at all sites identified in Phase A/Day 3. Connect `PCIe_Root_Complex` dispatch.
+Finish XML config parsing (`Host_Interface_Type=UFS`) and the real switch-case logic at all locations identified in Phase A/Day 3. Connect `PCIe_Root_Complex` dispatch.
 
 **Day 9: HS-Gear 5 timing and RPMB round-trip modeling**
-Add HS-Gear 5 bandwidth constants (19968/23347.2/23296.0 Mbps per lane, §4 table). Add the RPMB authenticated-command latency multiplier (2 or more round trips instead of 1, §3) if RPMB traffic is exercised by the target workloads, otherwise stub and document as a known simplification.
+Add HS-Gear 5 bandwidth constants (19968/23347.2/23296.0 Mbps per lane, §4 table) via the `PCIe_Link` parameter path (§6 "Link timing" row): per-lane GB/s, lane count 1-2, and UniPro/M-PHY-scale per-packet overhead bytes replacing the PCIe TLP/DLLP defaults. Set `UFS_Processing_Delay` (the HBA-level analogue of `SATA_Processing_Delay`) as an explicit, documented assumption per §8. Add the RPMB authenticated-command latency multiplier (2 or more round trips instead of 1, §3) if RPMB traffic is exercised by the target workloads, otherwise stub and document as a known simplification.
 
 **Day 10: First end-to-end run**
 Add build-system entries (vcxproj). Run a first smoke test with a synthetic multi-queue workload, there's no single-queue mode to fall back to, MCQ is the only path (§5). Sanity-compare timing behavior against NVMe's multi-queue baseline, the structurally closer reference now that legacy mode isn't in consideration.
@@ -211,10 +227,10 @@ Confirm existing NVMe/SATA configs produce byte-for-byte identical output to pre
 **Days 16-17: Buffer**
 Reserved for fixes surfaced during validation and any scope adjustments.
 
-## 8. Known gaps / assumptions, read before treating any remaining claim as fact
+## 8. Known gaps / assumptions, read before treating any remaining assumption as fact
 
 1. ~~UFSHCI 5.0 spec not available~~, **closed 2026-07-17**, JESD223G confirms MCQ/doorbell/UTRD are unchanged from 4.1 (§4.2).
 2. **No line-coding/protocol-efficiency percentage is stated in JESD220G, JESD220H, or JESD223G** for any HS-Gear. The bandwidth table in §4 gives raw PHY Mbps only. Any "effective throughput" constant used in the simulator is necessarily an assumption pending the MIPI M-PHY spec (not available yet).
 3. **Fast Recovery Mode has no numeric timeout in the spec** (§3). Qualitative only. Skip modeling it, or clearly label any constant used as invented.
-4. **MCQ-specific timing/overhead constants (queue creation cost, doorbell-write latency) are not stated anywhere in JESD223F or JESD223G** (§2.4). If the simulator needs one, it's an assumption.
+4. **MCQ-specific timing/overhead constants (queue creation cost, doorbell-write latency) are not stated anywhere in JESD223F or JESD223G** (§2.4). If the simulator needs one, it's an assumption. The same applies to the `UFS_Processing_Delay` HBA parameter (§6) and the per-packet link overhead bytes substituted for PCIe's TLP/DLLP constants (§6 "Link timing" row). Both are explicit, documented assumptions, chosen by analogy with the existing `SATA_Processing_Delay`/PCIe values.
 5. **Host-side HS-Gear6 support mandate is not explicitly stated** in JESD220H (only the device-side mandate is). Worth double-checking if host-side gear negotiation is modeled (§4).
