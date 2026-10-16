@@ -80,6 +80,19 @@ const uint64_t UFS_DOORBELL_QUEUE_STRIDE = 0x10;
 //MCQConfig.AS analogue (JESD223F 5.9.2): no weighted-round-robin exists in UFS
 enum class UFS_Arbitration_Type { ROUND_ROBIN, STRICT_PRIORITY };
 
+//Modeled UFS standard version. The two versions share the entire MCQ/register
+//code path. JESD223G's own changelog confirms queue count, depth, entry formats,
+//doorbells, arbitration, and interrupt aggregation are byte-for-byte unchanged
+//from UFSHCI 4.1 (plan.md section 4.2). So the version's modeled effect is the
+//link-gear ceiling: HS-GEAR5 is the UFS 4.1 mandatory maximum (JESD220G 8.4),
+//HS-GEAR6 requires UFS 5.0 / M-PHY 6.0 / UniPro 3.0 (JESD220H 8.4).
+enum class UFS_Version_Type { UFS_4_1, UFS_5_0 };
+
+inline unsigned int UFS_max_gear_for_version(UFS_Version_Type version)
+{
+	return version == UFS_Version_Type::UFS_5_0 ? 6 : 5;
+}
+
 //HS-Gear per-lane raw PHY rates in Mbps, exact spec values (JESD220G Table 6.7,
 //confirmed identical in JESD220H which adds HS-GEAR6 for UFS 5.0). The Rate-B
 //column is the fref 19.2/38.4 MHz series. The 26.0/52.0 MHz variant differs

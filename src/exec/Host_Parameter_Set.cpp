@@ -6,7 +6,8 @@ double Host_Parameter_Set::PCIe_Lane_Bandwidth = 0.4;//uint is GB/s
 unsigned int Host_Parameter_Set::PCIe_Lane_Count = 4;
 sim_time_type Host_Parameter_Set::SATA_Processing_Delay;//The overall hardware and software processing delay to send/receive a SATA message in nanoseconds
 sim_time_type Host_Parameter_Set::UFS_Processing_Delay = 400;//nanoseconds [ASSUMPTION, ufs-design.md section 5]
-unsigned int Host_Parameter_Set::UFS_Gear = 5;//UFS 4.1 default. 6 for UFS 5.0
+UFS_Version_Type Host_Parameter_Set::UFS_Version = UFS_Version_Type::UFS_4_1;
+unsigned int Host_Parameter_Set::UFS_Gear = 0;//0 = auto: the version's mandatory maximum gear
 char Host_Parameter_Set::UFS_Rate_Series = 'B';
 unsigned int Host_Parameter_Set::UFS_Lane_Count = 2;
 double Host_Parameter_Set::UFS_Link_Efficiency = 0.80;//[ASSUMPTION: 8b10b]
@@ -35,6 +36,10 @@ void Host_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 
 	attr = "UFS_Processing_Delay";
 	val = std::to_string(UFS_Processing_Delay);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Version";
+	val = (UFS_Version == UFS_Version_Type::UFS_5_0 ? "5.0" : "4.1");
 	xmlwriter.Write_attribute_string(attr, val);
 
 	attr = "UFS_Gear";
@@ -80,11 +85,20 @@ void Host_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 			} else if (strcmp(param->name(), "UFS_Processing_Delay") == 0) {
 				std::string val = param->value();
 				UFS_Processing_Delay = std::stoul(val);
+			} else if (strcmp(param->name(), "UFS_Version") == 0) {
+				std::string val = param->value();
+				if (val.compare("4.1") == 0) {
+					UFS_Version = UFS_Version_Type::UFS_4_1;
+				} else if (val.compare("5.0") == 0) {
+					UFS_Version = UFS_Version_Type::UFS_5_0;
+				} else {
+					PRINT_ERROR("UFS_Version must be 4.1 or 5.0")
+				}
 			} else if (strcmp(param->name(), "UFS_Gear") == 0) {
 				std::string val = param->value();
 				UFS_Gear = std::stoul(val);
-				if (UFS_Gear < 1 || UFS_Gear > 6) {
-					PRINT_ERROR("UFS_Gear must be between 1 and 6 (HS-GEAR6 is UFS 5.0)")
+				if (UFS_Gear > 6) {
+					PRINT_ERROR("UFS_Gear must be between 0 (auto) and 6; the version compatibility check happens at link construction")
 				}
 			} else if (strcmp(param->name(), "UFS_Rate_Series") == 0) {
 				std::string val = param->value();

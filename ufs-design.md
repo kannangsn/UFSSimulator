@@ -166,7 +166,8 @@ XML names follow existing `Device_Parameter_Set` / `Host_Parameter_Set` conventi
 | `UFS_Arbitration` | Device | `RR` | `RR` \| `STRICT_PRIORITY` (§4) |
 | `UFS_IACTH` | Device | 0 (disabled) | 0..31 completions per interrupt-aggregation flush (§6) |
 | `UFS_IATOVAL_us` | Device | 0 (disabled) | aggregation timeout, **defined in µs directly**. The spec's 40 µs-unit encoding is a legacy-register analogy, not restated for MCQ (`plan.md` §2.4), so we avoid inheriting its unit ambiguity |
-| `UFS_Gear` | Host | 5 | 5 (UFS 4.1) or 6 (UFS 5.0), sets per-lane rate from the `plan.md` §4 table |
+| `UFS_Version` | Host | `4.1` | `4.1` \| `5.0`, the modeled standard version. Sets the gear ceiling (G5 vs G6) and the auto-gear default. The MCQ/register path is identical for both (JESD223G changelog, `plan.md` §4.2), the version's modeled effect is link speed only. |
+| `UFS_Gear` | Host | 0 (auto) | 0 = the version's mandatory maximum (4.1→G5, 5.0→G6, per JESD220G/H §8.4), explicit 1..6 validated against `UFS_Version` at link construction. G6 on a 4.1 config is a hard error (requires M-PHY 6.0) |
 | `UFS_Rate_Series` | Host | `B` | `A` \| `B` (Rate-B @ 19.2/38.4 MHz refclk column) |
 | `UFS_Lane_Count` | Host | 2 | 1..2 |
 | `UFS_Link_Efficiency` | Host | 0.80 | **[ASSUMPTION]** 8b10b line-coding factor, no spec-stated effective-throughput figure exists (`plan.md` §8 item 2) |

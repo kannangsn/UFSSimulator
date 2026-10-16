@@ -32,13 +32,25 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 		this->UFS_hba = NULL;
 	}
 	if (ssd_host_interface->GetType() == HostInterface_Types::UFS) {
+		//Resolve the HS-Gear against the modeled UFS version: gear 0 (auto) means
+		//the version's mandatory maximum (JESD220G/H 8.4: G5 for 4.1, G6 for 5.0),
+		//and an explicit gear above the version's ceiling is a config error.
+		//HS-GEAR6 requires UFS 5.0 / M-PHY 6.0 / UniPro 3.0.
+		unsigned int max_gear = UFS_max_gear_for_version(parameters->UFS_Version);
+		unsigned int gear = (parameters->UFS_Gear == 0) ? max_gear : parameters->UFS_Gear;
+		if (gear > max_gear) {
+			PRINT_ERROR("UFS_Gear " << gear << " exceeds the maximum for UFS_Version "
+				<< (parameters->UFS_Version == UFS_Version_Type::UFS_5_0 ? "5.0" : "4.1")
+				<< " (HS-GEAR6 requires UFS 5.0 / M-PHY 6.0)")
+		}
 		//UFS link: the HS-Gear rate mapped onto the link model's parameters (plan.md
 		//section 6 "Link timing"): exact per-lane Mbps from JESD220G/H Table 6.7 x
 		//UFS_Link_Efficiency [ASSUMPTION: 8b10b] -> GB/s per lane, 1-2 lanes, and an
 		//8-byte per-packet overhead with 256-byte segments approximating UniPro L2
-		//framing [ASSUMPTION] in place of PCIe's TLP/DLLP constants. Worked default:
-		//HS-G5 Rate-B = 23347.2 Mbps x 0.80 / 8000 = 2.335 GB/s per lane.
-		double ufs_lane_bandwidth_GBPs = UFS_gear_rate_mbps(parameters->UFS_Gear, parameters->UFS_Rate_Series == 'B')
+		//framing [ASSUMPTION] in place of PCIe's TLP/DLLP constants. Worked defaults:
+		//4.1 -> HS-G5 Rate-B = 23347.2 Mbps x 0.80 / 8000 = 2.335 GB/s per lane.
+		//5.0 -> HS-G6 Rate-B = 46694.4 Mbps -> 4.669 GB/s per lane (exactly 2x).
+		double ufs_lane_bandwidth_GBPs = UFS_gear_rate_mbps(gear, parameters->UFS_Rate_Series == 'B')
 			* parameters->UFS_Link_Efficiency / 8000.0;
 		this->Link = new Host_Components::PCIe_Link(this->ID() + ".UniProLink", NULL, NULL,
 			ufs_lane_bandwidth_GBPs, parameters->UFS_Lane_Count,
