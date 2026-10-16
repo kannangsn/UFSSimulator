@@ -20,6 +20,13 @@ IO_Flow_Synthetic::IO_Flow_Synthetic(const sim_object_id_type &name, uint16_t fl
 																														  generator_type(generator_type), Average_inter_arrival_time_nano_sec(Average_inter_arrival_time_nano_sec), average_number_of_enqueued_requests(average_number_of_enqueued_requests),
 																														  seed(seed), generate_aligned_addresses(generate_aligned_addresses), alignment_value(alignment_value)
 {
+	//Generators are created conditionally below; null them first so the destructor can safely delete all of them
+	random_request_type_generator = NULL;
+	random_address_generator = NULL;
+	random_hot_cold_generator = NULL;
+	random_hot_address_generator = NULL;
+	random_request_size_generator = NULL;
+	random_time_interval_generator = NULL;
 	//If read ratio is 0, then we change its value to a negative one so that in request generation we never generate a read request
 	if (read_ratio == 0.0)
 	{

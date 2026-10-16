@@ -10,6 +10,9 @@ namespace MQSimEngine
 	class Sim_Object
 	{
 	public:
+		//Virtual so that deleting a derived object through a Sim_Object-derived base pointer (e.g. IO_Flow_Base*, NVM_PHY_Base*)
+		//is well defined. Without it Apple clang traps (brk #1) in the abstract classes' complete-object destructors.
+		virtual ~Sim_Object() {}
 		Sim_Object(const sim_object_id_type &id)
 		{
 			_id = id;
