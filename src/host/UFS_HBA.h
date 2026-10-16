@@ -13,7 +13,7 @@
 #include "IO_Flow_Base.h"
 #include "PCIe_Root_Complex.h"
 
-//Host-side UFS adapter (plan.md section 5.2): owns all SQ/CQ rings and routes
+//Host-side UFS adapter. Owns all SQ/CQ rings and routes
 //IO flows through them, generalizing SATA_HBA's single-NCQ pattern to up to 32
 //MCQ rings. IO_Flow_Base's per-flow queue-pair model cannot represent MCQ's
 //queue-count/flow-count decoupling or N:1 SQ->CQ mapping, so queue topology
@@ -41,7 +41,7 @@ namespace Host_Components
 		uint64_t Submission_queue_memory_base_address;      //UFS_SQ_MEMORY(SQ_id)
 		uint64_t UCD_area_memory_base_address;              //UFS_UCD_MEMORY(SQ_id, 0)
 		std::set<uint8_t> available_task_tags;
-		std::unordered_map<uint16_t, Host_IO_Request*> queue;//in-flight requests keyed by task tag (completion lookup, Day 7). The authoritative owner of in-flight pointers
+		std::unordered_map<uint16_t, Host_IO_Request*> queue;//in-flight requests keyed by task tag (completion lookup). The authoritative owner of in-flight pointers
 		std::vector<Host_IO_Request*> request_queue_in_memory;//ring-slot view of the same requests, addressed by the device's UTRD/UCD reads. Slots are overwritten on ring wrap
 		std::list<Host_IO_Request*> waiting_requests_for_submission;//ring full or no free tag
 	};

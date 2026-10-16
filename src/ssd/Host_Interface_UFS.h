@@ -9,8 +9,8 @@
 #include "User_Request.h"
 #include "Host_Interface_Defs.h"
 
-//UFS host interface, MCQ mode only (ufs-design.md, plan.md section 5.1: no legacy
-//single-doorbell mode is built). Structure follows Host_Interface_NVMe, with the
+//UFS host interface, MCQ mode only (ufs-design.md: no legacy single-doorbell mode
+//is built). Structure follows Host_Interface_NVMe, with the
 //UFS-specific differences called out inline.
 
 namespace SSD_Components
@@ -61,7 +61,7 @@ public:
 
 //Completion-queue state is separate from the per-stream state because UFS allows
 //N:1 SQ->CQ mapping (ufs-design.md sections 1.2, 6). Also carries the per-CQ
-//interrupt-aggregation context (IACTH/IATOVAL) implemented in Phase B Day 7.
+//interrupt-aggregation context (IACTH/IATOVAL).
 class UFS_Completion_Queue_Context
 {
 public:
@@ -140,7 +140,7 @@ public:
 	void Fetch_write_data(User_Request* request);
 	void Send_read_data(User_Request* request);
 	//Writes back the Response UPIU (32 B, UCD region) and the CQ entry (32 B, CQ
-	//ring), ufs-design.md section 3 steps 7-8. Implemented Phase B Day 7.
+	//ring), ufs-design.md section 3 steps 7-8.
 	void Send_completion_entry(User_Request* request);
 	void Process_pcie_write_message(uint64_t address, void* payload, unsigned int payload_size);
 	void Process_pcie_read_message(uint64_t address, void* payload, unsigned int payload_size);

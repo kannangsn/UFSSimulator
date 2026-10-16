@@ -83,7 +83,7 @@ enum class UFS_Arbitration_Type { ROUND_ROBIN, STRICT_PRIORITY };
 //Modeled UFS standard version. The two versions share the entire MCQ/register
 //code path. JESD223G's own changelog confirms queue count, depth, entry formats,
 //doorbells, arbitration, and interrupt aggregation are byte-for-byte unchanged
-//from UFSHCI 4.1 (plan.md section 4.2). So the version's modeled effect is the
+//from UFSHCI 4.1. So the version's modeled effect is the
 //link-gear ceiling: HS-GEAR5 is the UFS 4.1 mandatory maximum (JESD220G 8.4),
 //HS-GEAR6 requires UFS 5.0 / M-PHY 6.0 / UniPro 3.0 (JESD220H 8.4).
 enum class UFS_Version_Type { UFS_4_1, UFS_5_0 };

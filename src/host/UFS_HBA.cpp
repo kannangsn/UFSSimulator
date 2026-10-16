@@ -4,9 +4,6 @@
 #include "../ssd/Host_Interface_Defs.h"
 #include "../sim/Engine.h"
 
-//Remaining stubs land in Phase B (plan.md section 7): Day 5 doorbells, Day 6
-//submission path, Day 7 completion consumption.
-
 namespace Host_Components
 {
 	//Flow priority class -> SQATTRy.SQPL (0 = highest). UNDEFINED maps to the
@@ -87,7 +84,7 @@ namespace Host_Components
 	void UFS_HBA::Validate_simulation_config()
 	{
 		//ufs-design.md section 8 validity conditions that are HBA-local. The config-level
-		//checks land with the XML parsing in Phase B Day 8
+		//checks are alongside the XML parsing
 		if (sq_count < 1 || sq_count > 32) {
 			PRINT_ERROR("UFS_HBA: SQ count must be between 1 and 32 (MCQCAP.MAXQ)")
 		}

@@ -108,8 +108,7 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 		}
 		break;
 	case HostInterface_Types::UFS:
-		//SQ/CQ rings are owned by the UFS_HBA (plan.md section 5.2), not per flow.
-		//Nothing to set up here. Flow-to-SQ routing is implemented in Phase B Day 6.
+		//SQ/CQ rings are owned by the UFS_HBA, not per flow. Nothing to set up here.
 		break;
 	default:
 		break;

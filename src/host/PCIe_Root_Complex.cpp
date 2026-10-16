@@ -107,7 +107,7 @@ namespace Host_Components
 				default:
 					//this switch previously had no default case, so an unmatched type
 					//fell through without setting new_pcie_message->Payload, leaving it
-					//uninitialized instead of triggering an explicit error (see plan.md section 6)
+					//uninitialized instead of triggering an explicit error
 					PRINT_ERROR("Unknown Host Interface type in PCIe_Root_Complex")
 			}
 		}

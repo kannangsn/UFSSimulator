@@ -3,9 +3,6 @@
 #include "../host/Host_Defs.h"
 #include "../sim/Engine.h"
 
-//Remaining stubs land in Phase B (plan.md section 7): Day 5 doorbells/arbitration,
-//Day 6 command fetch, Day 7 completion path + interrupt aggregation.
-
 //Spec-fidelity guards for the structures carried over the link (ufs-design.md
 //section 2). A padding surprise here would silently skew every link-transfer size.
 static_assert(sizeof(UTP_Transfer_Request_Descriptor) == 32, "UTRD must be 8 DWORDs (JESD223F 6.1.1)");
@@ -144,7 +141,7 @@ namespace SSD_Components
 	void Input_Stream_Manager_UFS::fetch_pending_requests()
 	{
 		//MCQConfig.MAC: device-wide cap on outstanding commands, counted from fetch
-		//issue to completion (decremented in Handle_serviced_request, Phase B Day 7)
+		//issue to completion (decremented in Handle_serviced_request)
 		while (total_active_commands < max_active_commands) {
 			stream_id_type stream_id = arbitrate_next_submission_queue();
 			if (stream_id == UFS_NO_ELIGIBLE_SQ) {
@@ -348,7 +345,7 @@ namespace SSD_Components
 	{
 		//DMA step 1 of the two-step fetch (ufs-design.md section 3): read the 32-byte
 		//UTRD at the SQ head. Step 2 (the UCD read) is issued when this one arrives
-		//in Process_pcie_read_message (Phase B Day 6).
+		//in Process_pcie_read_message.
 		UFS_DMA_Req_Item* dma_req_item = new UFS_DMA_Req_Item;
 		dma_req_item->Type = UFS_DMA_Req_Type::UTRD;
 		dma_req_item->object = (void*)(intptr_t)stream_id;
@@ -549,8 +546,8 @@ namespace SSD_Components
 
 	void Host_Interface_UFS::Validate_simulation_config()
 	{
-		//ufs-design.md section 8 validity conditions. The config-parse-level checks land
-		//in Phase B Day 8 together with the XML parameters
+		//ufs-design.md section 8 validity conditions. The config-parse-level checks are
+		//alongside the XML parameter parsing
 		if (this->input_stream_manager == NULL) {
 			PRINT_ERROR("UFS host interface bad configuration: no input stream manager is set!")
 		}

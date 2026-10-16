@@ -43,8 +43,8 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 				<< (parameters->UFS_Version == UFS_Version_Type::UFS_5_0 ? "5.0" : "4.1")
 				<< " (HS-GEAR6 requires UFS 5.0 / M-PHY 6.0)")
 		}
-		//UFS link: the HS-Gear rate mapped onto the link model's parameters (plan.md
-		//section 6 "Link timing"): exact per-lane Mbps from JESD220G/H Table 6.7 x
+		//UFS link: the HS-Gear rate mapped onto the link model's parameters. Exact
+		//per-lane Mbps from JESD220G/H Table 6.7 x
 		//UFS_Link_Efficiency [ASSUMPTION: 8b10b] -> GB/s per lane, 1-2 lanes, and an
 		//8-byte per-packet overhead with 256-byte segments approximating UniPro L2
 		//framing [ASSUMPTION] in place of PCIe's TLP/DLLP constants. Worked defaults:
@@ -78,7 +78,7 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 				break;
 			case HostInterface_Types::UFS:
 				//UFS queue geometry is in the UFS_HBA, not in per-flow queue-pair
-				//parameters (plan.md section 5.2). Implemented in Phase B Day 8.
+				//parameters.
 				break;
 			default:
 				break;

@@ -60,7 +60,7 @@ namespace Host_Components
 		//there (stats + next-request generation in the derived flows) is
 		//protocol-neutral per-request accounting, not the SATA link format
 		void UFS_consume_io_request(Host_IO_Request* request) { SATA_consume_io_request(request); }
-		void Set_ufs_hba(UFS_HBA* ufs_hba) { this->ufs_hba = ufs_hba; }//set by Host_System in UFS mode (plan.md section 7, Phase B Day 8)
+		void Set_ufs_hba(UFS_HBA* ufs_hba) { this->ufs_hba = ufs_hba; }//set by Host_System in UFS mode
 		LHA_type Get_start_lsa_on_device();
 		LHA_type Get_end_lsa_address_on_device();
 		uint32_t Get_generated_request_count();
