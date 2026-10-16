@@ -2,6 +2,7 @@
 #include "Host_System.h"
 #include "../ssd/Host_Interface_Base.h"
 #include "../ssd/Host_Interface_NVMe.h"
+#include "../ssd/Host_Interface_UFS.h"
 #include "../host/PCIe_Root_Complex.h"
 #include "../host/IO_Flow_Synthetic.h"
 #include "../host/IO_Flow_Trace_Based.h"
@@ -18,6 +19,17 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 		this->SATA_hba = new Host_Components::SATA_HBA(ID() + ".SATA_HBA", ((SSD_Components::Host_Interface_SATA*)ssd_host_interface)->Get_ncq_depth(), parameters->SATA_Processing_Delay, NULL, NULL);
 	} else {
 		this->SATA_hba = NULL;
+	}
+	if (ssd_host_interface->GetType() == HostInterface_Types::UFS) {
+		SSD_Components::Host_Interface_UFS* ufs_host_interface = (SSD_Components::Host_Interface_UFS*)ssd_host_interface;
+		this->UFS_hba = new Host_Components::UFS_HBA(ID() + ".UFS_HBA",
+			(uint16_t)parameters->IO_Flow_Definitions.size(), ufs_host_interface->Get_completion_queue_count(),
+			ufs_host_interface->Get_queue_depth(), parameters->UFS_Processing_Delay, NULL, NULL);
+		//Registered as a simulation object (unlike SATA_HBA): its Start_simulation
+		//stamps per-SQ priorities from the flows, and its Validate checks ring validity conditions
+		Simulator->AddObject(this->UFS_hba);
+	} else {
+		this->UFS_hba = NULL;
 	}
 	this->Link = new Host_Components::PCIe_Link(this->ID() + ".PCIeLink", NULL, NULL, parameters->PCIe_Lane_Bandwidth, parameters->PCIe_Lane_Count);
 	this->PCIe_root_complex = new Host_Components::PCIe_Root_Complex(this->Link, ssd_host_interface->GetType(), this->SATA_hba, NULL);
@@ -88,6 +100,14 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 		this->SATA_hba->Set_io_flows(&this->IO_flows);
 		this->SATA_hba->Set_root_complex(this->PCIe_root_complex);
 	}
+	if (ssd_host_interface->GetType() == HostInterface_Types::UFS) {
+		this->UFS_hba->Set_io_flows(&this->IO_flows);
+		this->UFS_hba->Set_root_complex(this->PCIe_root_complex);
+		this->PCIe_root_complex->Set_ufs_hba(this->UFS_hba);
+		for (auto &flow : this->IO_flows) {
+			flow->Set_ufs_hba(this->UFS_hba);
+		}
+	}
 }
 
 Host_System::~Host_System() 
@@ -97,6 +117,9 @@ Host_System::~Host_System()
 	delete this->PCIe_switch;
 	if (ssd_device->Host_interface->GetType() == HostInterface_Types::SATA) {
 		delete this->SATA_hba;
+	}
+	if (ssd_device->Host_interface->GetType() == HostInterface_Types::UFS) {
+		delete this->UFS_hba;
 	}
 	for (uint16_t flow_id = 0; flow_id < this->IO_flows.size(); flow_id++) {
 		delete this->IO_flows[flow_id];
@@ -131,9 +154,18 @@ void Host_System::Start_simulation()
 				SATA_hba->Get_sata_ncq_info()->Submission_queue_memory_base_address, SATA_hba->Get_sata_ncq_info()->Completion_queue_memory_base_address);
 			break;
 		case HostInterface_Types::UFS:
-			//UFS_HBA <-> Host_Interface_UFS stream/ring connection lands in Phase B Day 8
-			PRINT_ERROR("UFS host-interface integration is not implemented yet (plan.md section 7, Phase B Day 8)")
+		{
+			//One stream (SQ) per flow. CQ assignment is SQ i -> CQ (i mod cq_count),
+			//matching the UFS_HBA's ring topology (ufs-design.md section 5)
+			uint16_t cq_count = ((SSD_Components::Host_Interface_UFS*)ssd_device->Host_interface)->Get_completion_queue_count();
+			for (uint16_t flow_cntr = 0; flow_cntr < IO_flows.size(); flow_cntr++) {
+				((SSD_Components::Host_Interface_UFS*)ssd_device->Host_interface)->Create_new_stream(
+					IO_flows[flow_cntr]->Priority_class(),
+					IO_flows[flow_cntr]->Get_start_lsa_on_device(), IO_flows[flow_cntr]->Get_end_lsa_address_on_device(),
+					UFS_SQ_MEMORY(flow_cntr), UFS_CQ_MEMORY(flow_cntr % cq_count));
+			}
 			break;
+		}
 		default:
 			break;
 	}

@@ -7,8 +7,13 @@ int Device_Parameter_Set::Seed = 123;//Seed for random number generation (used i
 bool Device_Parameter_Set::Enabled_Preconditioning = true;
 NVM::NVM_Type Device_Parameter_Set::Memory_Type = NVM::NVM_Type::FLASH;
 HostInterface_Types Device_Parameter_Set::HostInterface_Type = HostInterface_Types::NVME;
-uint16_t Device_Parameter_Set::IO_Queue_Depth = 1024;//For NVMe, it determines the size of the submission/completion queues; for SATA, it determines the size of NCQ_Control_Structure
-uint16_t Device_Parameter_Set::Queue_Fetch_Size = 512;//Used in NVMe host interface
+uint16_t Device_Parameter_Set::IO_Queue_Depth = 1024;//For NVMe, it determines the size of the submission/completion queues. For SATA, it determines the size of NCQ_Control_Structure. For UFS, the SQ/CQ ring depth
+uint16_t Device_Parameter_Set::Queue_Fetch_Size = 512;//Used in NVMe and UFS host interfaces
+uint16_t Device_Parameter_Set::UFS_Completion_Queue_Count = 0;//0 = one CQ per SQ (1:1 topology)
+uint16_t Device_Parameter_Set::UFS_Max_Active_Commands = 32;//MCQConfig.MAC spec default (0x1F, zero-based)
+UFS_Arbitration_Type Device_Parameter_Set::UFS_Arbitration = UFS_Arbitration_Type::ROUND_ROBIN;
+uint16_t Device_Parameter_Set::UFS_IACTH = 0;//interrupt aggregation disabled by default
+uint32_t Device_Parameter_Set::UFS_IATOVAL_us = 0;//interrupt aggregation disabled by default
 SSD_Components::Caching_Mechanism Device_Parameter_Set::Caching_Mechanism = SSD_Components::Caching_Mechanism::ADVANCED;
 SSD_Components::Cache_Sharing_Mode Device_Parameter_Set::Data_Cache_Sharing_Mode = SSD_Components::Cache_Sharing_Mode::SHARED;//Data cache sharing among concurrently running I/O flows, if NVMe host interface is used
 unsigned int Device_Parameter_Set::Data_Cache_Capacity = 1024 * 1024 * 512;//Data cache capacity in bytes
@@ -91,6 +96,26 @@ void Device_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 
 	attr = "Queue_Fetch_Size";
 	val = std::to_string(Queue_Fetch_Size);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Completion_Queue_Count";
+	val = std::to_string(UFS_Completion_Queue_Count);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Max_Active_Commands";
+	val = std::to_string(UFS_Max_Active_Commands);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Arbitration";
+	val = (UFS_Arbitration == UFS_Arbitration_Type::STRICT_PRIORITY ? "STRICT_PRIORITY" : "RR");
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_IACTH";
+	val = std::to_string(UFS_IACTH);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_IATOVAL_us";
+	val = std::to_string(UFS_IATOVAL_us);
 	xmlwriter.Write_attribute_string(attr, val);
 
 
@@ -413,6 +438,31 @@ void Device_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 			} else if (strcmp(param->name(), "Queue_Fetch_Size") == 0) {
 				std::string val = param->value();
 				Queue_Fetch_Size = (uint16_t) std::stoull(val);
+			} else if (strcmp(param->name(), "UFS_Completion_Queue_Count") == 0) {
+				std::string val = param->value();
+				UFS_Completion_Queue_Count = (uint16_t) std::stoull(val);
+			} else if (strcmp(param->name(), "UFS_Max_Active_Commands") == 0) {
+				std::string val = param->value();
+				UFS_Max_Active_Commands = (uint16_t) std::stoull(val);
+			} else if (strcmp(param->name(), "UFS_Arbitration") == 0) {
+				std::string val = param->value();
+				std::transform(val.begin(), val.end(), val.begin(), ::toupper);
+				if (strcmp(val.c_str(), "RR") == 0 || strcmp(val.c_str(), "ROUND_ROBIN") == 0) {
+					UFS_Arbitration = UFS_Arbitration_Type::ROUND_ROBIN;
+				} else if (strcmp(val.c_str(), "STRICT_PRIORITY") == 0) {
+					UFS_Arbitration = UFS_Arbitration_Type::STRICT_PRIORITY;
+				} else {
+					PRINT_ERROR("Unknown UFS arbitration type specified in the SSD configuration file")
+				}
+			} else if (strcmp(param->name(), "UFS_IACTH") == 0) {
+				std::string val = param->value();
+				UFS_IACTH = (uint16_t) std::stoull(val);
+				if (UFS_IACTH > 31) {
+					PRINT_ERROR("UFS_IACTH must be between 0 and 31 (JESD223F interrupt aggregation counter threshold)")
+				}
+			} else if (strcmp(param->name(), "UFS_IATOVAL_us") == 0) {
+				std::string val = param->value();
+				UFS_IATOVAL_us = (uint32_t) std::stoull(val);
 			} else if (strcmp(param->name(), "Caching_Mechanism") == 0) {
 				std::string val = param->value();
 				std::transform(val.begin(), val.end(), val.begin(), ::toupper);

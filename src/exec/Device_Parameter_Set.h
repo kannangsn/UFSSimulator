@@ -20,8 +20,14 @@ public:
 	static bool Enabled_Preconditioning;
 	static NVM::NVM_Type Memory_Type;
 	static HostInterface_Types HostInterface_Type;
-	static uint16_t IO_Queue_Depth;//For NVMe, it determines the size of the submission/completion queues; for SATA, it determines the size of NCQ_Control_Structure
-	static uint16_t Queue_Fetch_Size;//Used in NVMe host interface
+	static uint16_t IO_Queue_Depth;//For NVMe, it determines the size of the submission/completion queues. For SATA, it determines the size of NCQ_Control_Structure. For UFS, the SQ/CQ ring depth (2..8192, one slot always reserved)
+	static uint16_t Queue_Fetch_Size;//Used in NVMe and UFS host interfaces (per-queue in-flight fetch window)
+	//UFS MCQ parameters (ufs-design.md section 5). All ignored unless HostInterface_Type is UFS
+	static uint16_t UFS_Completion_Queue_Count;//Number of MCQ completion queues. 0 (default) means one CQ per SQ (1:1). A smaller value gives N:1 SQ-to-CQ mapping via SQ i -> CQ (i mod count)
+	static uint16_t UFS_Max_Active_Commands;//MCQConfig.MAC analogue: device-wide cap on outstanding commands (spec default 32)
+	static UFS_Arbitration_Type UFS_Arbitration;//MCQConfig.AS analogue: RR or STRICT_PRIORITY
+	static uint16_t UFS_IACTH;//Interrupt aggregation count threshold, 0..31. 0 (default) disables count-based aggregation
+	static uint32_t UFS_IATOVAL_us;//Interrupt aggregation timeout in microseconds. 0 (default) disables timeout-based aggregation
 	static SSD_Components::Caching_Mechanism Caching_Mechanism;
 	static SSD_Components::Cache_Sharing_Mode Data_Cache_Sharing_Mode;//Data cache sharing among concurrently running I/O flows, if NVMe host interface is used
 	static unsigned int Data_Cache_Capacity;//Data cache capacity in bytes

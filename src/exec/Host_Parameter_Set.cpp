@@ -5,6 +5,7 @@
 double Host_Parameter_Set::PCIe_Lane_Bandwidth = 0.4;//uint is GB/s
 unsigned int Host_Parameter_Set::PCIe_Lane_Count = 4;
 sim_time_type Host_Parameter_Set::SATA_Processing_Delay;//The overall hardware and software processing delay to send/receive a SATA message in nanoseconds
+sim_time_type Host_Parameter_Set::UFS_Processing_Delay = 400;//nanoseconds [ASSUMPTION, ufs-design.md section 5]
 bool Host_Parameter_Set::Enable_ResponseTime_Logging = false;
 sim_time_type Host_Parameter_Set::ResponseTime_Logging_Period_Length = 400000;//nanoseconds
 std::string Host_Parameter_Set::Input_file_path;
@@ -26,6 +27,10 @@ void Host_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 
 	attr = "SATA_Processing_Delay";
 	val = std::to_string(SATA_Processing_Delay);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Processing_Delay";
+	val = std::to_string(UFS_Processing_Delay);
 	xmlwriter.Write_attribute_string(attr, val);
 
 	attr = "Enable_ResponseTime_Logging";
@@ -52,6 +57,9 @@ void Host_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 			} else if (strcmp(param->name(), "SATA_Processing_Delay") == 0) {
 				std::string val = param->value();
 				SATA_Processing_Delay = std::stoul(val);
+			} else if (strcmp(param->name(), "UFS_Processing_Delay") == 0) {
+				std::string val = param->value();
+				UFS_Processing_Delay = std::stoul(val);
 			} else if (strcmp(param->name(), "Enable_ResponseTime_Logging") == 0) {
 				std::string val = param->value();
 				std::transform(val.begin(), val.end(), val.begin(), ::toupper);

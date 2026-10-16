@@ -9,6 +9,7 @@
 #include "../host/PCIe_Switch.h"
 #include "../host/PCIe_Message.h"
 #include "../host/IO_Flow_Base.h"
+#include "../host/UFS_HBA.h"
 #include "../host/Host_IO_Request.h"
 #include "../ssd/Host_Interface_Base.h"
 #include "Host_Parameter_Set.h"
@@ -32,6 +33,7 @@ private:
 	Host_Components::PCIe_Link* Link;
 	Host_Components::PCIe_Switch* PCIe_switch;
 	Host_Components::SATA_HBA* SATA_hba;
+	Host_Components::UFS_HBA* UFS_hba;
 	std::vector<Host_Components::IO_Flow_Base*> IO_flows;
 	SSD_Device* ssd_device;
 	std::vector<Utils::Workload_Statistics*> get_workloads_statistics();

@@ -11,6 +11,7 @@ public:
 	static double PCIe_Lane_Bandwidth;//uint is GB/s
 	static unsigned int PCIe_Lane_Count;
 	static sim_time_type SATA_Processing_Delay;//The overall hardware and software processing delay to send/receive a SATA message in nanoseconds
+	static sim_time_type UFS_Processing_Delay;//UFS_HBA UTP/UniPro stack latency in nanoseconds [ASSUMPTION: no spec value exists, chosen by analogy with SATA_Processing_Delay. See ufs-design.md section 5]
 	static bool Enable_ResponseTime_Logging;
 	static sim_time_type ResponseTime_Logging_Period_Length;
 	static std::vector<IO_Flow_Parameter_Set*> IO_Flow_Definitions;

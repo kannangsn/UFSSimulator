@@ -362,10 +362,15 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 
 			break;
 		case HostInterface_Types::UFS:
-			//Host_Interface_UFS construction is implemented in Phase B Day 8, together with
-			//the UFS parameters in Device_Parameter_Set. Must exit with an explicit error until then.
-			//Falling through would hand an unassigned pointer to Simulator->AddObject.
-			PRINT_ERROR("UFS host interface construction is not implemented yet (plan.md section 7, Phase B Day 8)")
+			device->Host_interface = new SSD_Components::Host_Interface_UFS(device->ID() + ".HostInterface",
+																			Utils::Logical_Address_Partitioning_Unit::Get_total_device_lha_count(),
+																			parameters->IO_Queue_Depth,
+																			//0 means one CQ per SQ (1:1 topology)
+																			(parameters->UFS_Completion_Queue_Count == 0 ? (uint16_t)io_flows->size() : parameters->UFS_Completion_Queue_Count),
+																			parameters->UFS_Max_Active_Commands, parameters->UFS_Arbitration,
+																			(uint8_t)parameters->UFS_IACTH, (sim_time_type)parameters->UFS_IATOVAL_us * 1000,//config is in us, simulation time in ns
+																			(unsigned int)io_flows->size(), parameters->Queue_Fetch_Size,
+																			parameters->Flash_Parameters.Page_Capacity / SECTOR_SIZE_IN_BYTE, dcm);
 			break;
 		default:
 			PRINT_ERROR("Unknown host interface type in SSD_Device!")
