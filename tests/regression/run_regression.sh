@@ -18,10 +18,9 @@ RUN_EXIT=$?
 set -e
 
 if [ "$RUN_EXIT" -ne 0 ]; then
-    echo "WARNING: MQSim exited with status $RUN_EXIT while running the full workload.xml."
-    echo "This matches a known, pre-existing crash between scenario 1 and scenario 2"
-    echo "(see plan.md section 8, item 6). It is unrelated to UFS support and does not"
-    echo "affect the scenario 1 result file checked below, so it does not fail this check."
+    echo "FAIL: MQSim exited with status $RUN_EXIT while running the full workload.xml."
+    cat "$RUN_LOG"
+    exit 1
 fi
 
 if ! diff -q workload_scenario_1.xml "$SCRIPT_DIR/golden/workload_scenario_1.xml" > /dev/null 2>&1; then
