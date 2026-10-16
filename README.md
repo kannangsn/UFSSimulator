@@ -4,6 +4,40 @@ MQSim is a simulator that accurately captures the behavior of both modern multi-
 
 The full paper is published in FAST 2018 and is available online at https://people.inf.ethz.ch/omutlu/pub/MQSim-SSD-simulation-framework_fast18.pdf  
 
+## UFS 4.1 / 5.0 Host Interface (this fork)
+
+This fork adds **UFS (Universal Flash Storage)** as a third host-interface protocol
+(`Host_Interface_Type=UFS`), modeling the JEDEC UFS 4.1 and UFS 5.0 standards at the same
+performance-simulation fidelity MQSim uses for NVMe and SATA. Spec grounding: JESD220G/H
+(device/transport) and JESD223F/G (UFSHCI, where MCQ, doorbells, and the UTRD are actually specified).
+
+**What is modeled** (timing-relevant mechanics only):
+- **Multi-Circular Queue (MCQ)** mode of UFSHCI 4.x/5.0: up to 32 SQ/CQ rings with N:1 SQ→CQ
+  mapping, per-SQ 8-bit task-tag pools, the device-wide `MCQConfig.MAC` outstanding-command cap,
+  and round-robin or strict 8-level SQPL priority arbitration (`MCQConfig.AS`). Legacy
+  single-doorbell mode is deliberately not implemented.
+- The **two-step command fetch** (32 B UTRD from the SQ ring, then 48 B UCD = Command UPIU + PRDT),
+  Response UPIU + 32 B CQ-entry completion write-backs (OCS is in the CQ entry in MCQ mode), and
+  24 B DATA IN/OUT UPIU headers per 64 KB data segment. These are the per-command link overheads that
+  structurally distinguish UFS from NVMe's inline 64 B SQE / 16 B CQE.
+- **IACTH/IATOVAL interrupt aggregation** (count- and timeout-based completion coalescing).
+- **HS-Gear link timing** with the exact JESD220G/H Table 6.7 per-lane rates (HS-GEAR1–6, Rate A/B,
+  1–2 lanes). `UFS_Version` (4.1|5.0) sets the gear ceiling. HS-GEAR6, the UFS 5.0 delta, doubles
+  HS-GEAR5. The MCQ register layer is identical in both versions, per the JESD223G changelog.
+
+**Explicitly out of scope** (no timing relevance at this abstraction level, or unreachable by
+MQSim workloads): SCSI CDB semantics beyond READ(16)/WRITE(16) LBA/length, Query Requests, task
+management, the power-mode state machine, RPMB (workloads cannot express security commands),
+WriteBooster, inline hashing, and zoned storage. Two modeling constants are assumptions, since the
+specs state no value: `UFS_Link_Efficiency` (default 0.80, 8b10b) and `UFS_Processing_Delay`
+(default 400 ns, by analogy with `SATA_Processing_Delay`).
+
+**Getting started**: example configs, demo workloads, expected validated numbers, and per-knob
+documentation are in [`ufs/README.md`](ufs/README.md). The full design document is
+[`ufs-design.md`](ufs-design.md). Gap analysis and spec citations are in [`plan.md`](plan.md).
+Note `IO_Queue_Depth` must be ≤ 8192 for UFS (the SQATTRy.SIZE ceiling), and UFS response-time
+statistics clock from ring enqueue. Read them alongside the end-to-end delay.
+
 ## Citation
 Please cite our full FAST 2018 paper if you find this repository useful.
 

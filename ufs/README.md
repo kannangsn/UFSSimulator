@@ -2,6 +2,8 @@
 
 Example configs and workloads for MQSim's UFS host interface (MCQ mode, UFSHCI 4.1/5.0).
 Design documentation: `../ufs-design.md`. Implementation plan and spec grounding: `../plan.md`.
+Unit/integration tests for the UFS internals (ring construction, arbitration + MAC, the two-step
+fetch path end-to-end, completion + interrupt aggregation): `tests/run_tests.sh`.
 
 ## Files
 

@@ -193,7 +193,9 @@ void Host_System::Start_simulation()
 			break;
 		}
 		default:
-			break;
+			//unreachable with the closed 3-value enum. Explicit error reporting, so a future protocol
+			//cannot silently skip connecting its streams/queues
+			PRINT_ERROR("Unknown host interface type in Host_System::Start_simulation!")
 	}
 
 	if (preconditioning_required) {

@@ -259,7 +259,9 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 				break;
 			}
 			default:
-				break;
+				//unreachable with the closed 3-value enum. Explicit error reporting, so a future protocol
+				//cannot silently leave stream_count/resource lists empty
+				PRINT_ERROR("Unknown host interface type in SSD_Device flow-resource assignment!")
 			}
 		}
 
