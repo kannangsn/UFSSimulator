@@ -197,7 +197,15 @@ Flush = deliver all pending CQ entries to the HBA consumption path (§3 steps 9-
 Struct fields kept for byte-layout fidelity but never read by simulator logic: crypto (CCI/DUN),
 EHS lengths, IID/EXT_IID (always 0), Data Direction bits beyond read/write classification.
 Out of scope entirely, per `plan.md` §2.5/§4: Query Request content, Task Management, power modes,
-RPMB (stub per `plan.md` §7 Day 9 unless workloads need it), inline hashing, ZUFS.
+inline hashing, ZUFS.
+
+**RPMB, decided (Phase B Day 9): stubbed, not modeled.** MQSim workloads cannot express RPMB or
+security commands at all. `Host_IO_Request` carries only READ/WRITE types, and both trace and
+synthetic flow generators produce nothing else, so the ≥2-round-trip authenticated-command
+latency model (`plan.md` §3) has no traffic to attach to. If RPMB-bearing workloads are ever
+added, the multiplier belongs in the command-parse path of `Request_Fetch_Unit_UFS`
+(a SECURITY PROTOCOL IN/OUT opcode would issue a second command round trip before completion,
+serialized per RPMB region). Documented as a known simplification.
 
 ## 8. Validation invariants (checked in `Validate_simulation_config` / config parse)
 

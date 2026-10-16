@@ -80,6 +80,22 @@ const uint64_t UFS_DOORBELL_QUEUE_STRIDE = 0x10;
 //MCQConfig.AS analogue (JESD223F 5.9.2): no weighted-round-robin exists in UFS
 enum class UFS_Arbitration_Type { ROUND_ROBIN, STRICT_PRIORITY };
 
+//HS-Gear per-lane raw PHY rates in Mbps, exact spec values (JESD220G Table 6.7,
+//confirmed identical in JESD220H which adds HS-GEAR6 for UFS 5.0). The Rate-B
+//column is the fref 19.2/38.4 MHz series. The 26.0/52.0 MHz variant differs
+//slightly and is not exposed as a knob. Raw PHY rate only. Line-coding
+//efficiency is applied separately (UFS_Link_Efficiency [ASSUMPTION], no
+//spec-stated effective-throughput figure exists. See ufs-design.md section 5).
+inline double UFS_gear_rate_mbps(unsigned int gear, bool rate_series_b)
+{
+	static const double rate_a_mbps[6] = { 1248.0, 2496.0, 4992.0, 9984.0, 19968.0, 39936.0 };
+	static const double rate_b_mbps[6] = { 1459.2, 2918.4, 5836.8, 11673.6, 23347.2, 46694.4 };
+	if (gear < 1 || gear > 6) {
+		return 0.0;//rejected at config parse. Never reached in a validated run
+	}
+	return rate_series_b ? rate_b_mbps[gear - 1] : rate_a_mbps[gear - 1];
+}
+
 //UTP Transfer Request Descriptor = MCQ SQ entry, 8 DWORDs (JESD223F 6.1.1/6.2.1).
 //DW1/DW3 crypto fields are carried for layout fidelity, never interpreted.
 struct UTP_Transfer_Request_Descriptor

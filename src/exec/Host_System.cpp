@@ -31,7 +31,21 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 	} else {
 		this->UFS_hba = NULL;
 	}
-	this->Link = new Host_Components::PCIe_Link(this->ID() + ".PCIeLink", NULL, NULL, parameters->PCIe_Lane_Bandwidth, parameters->PCIe_Lane_Count);
+	if (ssd_host_interface->GetType() == HostInterface_Types::UFS) {
+		//UFS link: the HS-Gear rate mapped onto the link model's parameters (plan.md
+		//section 6 "Link timing"): exact per-lane Mbps from JESD220G/H Table 6.7 x
+		//UFS_Link_Efficiency [ASSUMPTION: 8b10b] -> GB/s per lane, 1-2 lanes, and an
+		//8-byte per-packet overhead with 256-byte segments approximating UniPro L2
+		//framing [ASSUMPTION] in place of PCIe's TLP/DLLP constants. Worked default:
+		//HS-G5 Rate-B = 23347.2 Mbps x 0.80 / 8000 = 2.335 GB/s per lane.
+		double ufs_lane_bandwidth_GBPs = UFS_gear_rate_mbps(parameters->UFS_Gear, parameters->UFS_Rate_Series == 'B')
+			* parameters->UFS_Link_Efficiency / 8000.0;
+		this->Link = new Host_Components::PCIe_Link(this->ID() + ".UniProLink", NULL, NULL,
+			ufs_lane_bandwidth_GBPs, parameters->UFS_Lane_Count,
+			8/*UniPro L2 header approx*/, 256/*max segment*/, 0, 0);
+	} else {
+		this->Link = new Host_Components::PCIe_Link(this->ID() + ".PCIeLink", NULL, NULL, parameters->PCIe_Lane_Bandwidth, parameters->PCIe_Lane_Count);
+	}
 	this->PCIe_root_complex = new Host_Components::PCIe_Root_Complex(this->Link, ssd_host_interface->GetType(), this->SATA_hba, NULL);
 	this->Link->Set_root_complex(this->PCIe_root_complex);
 	this->PCIe_switch = new Host_Components::PCIe_Switch(this->Link, ssd_host_interface);

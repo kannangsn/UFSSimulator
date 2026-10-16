@@ -6,6 +6,10 @@ double Host_Parameter_Set::PCIe_Lane_Bandwidth = 0.4;//uint is GB/s
 unsigned int Host_Parameter_Set::PCIe_Lane_Count = 4;
 sim_time_type Host_Parameter_Set::SATA_Processing_Delay;//The overall hardware and software processing delay to send/receive a SATA message in nanoseconds
 sim_time_type Host_Parameter_Set::UFS_Processing_Delay = 400;//nanoseconds [ASSUMPTION, ufs-design.md section 5]
+unsigned int Host_Parameter_Set::UFS_Gear = 5;//UFS 4.1 default. 6 for UFS 5.0
+char Host_Parameter_Set::UFS_Rate_Series = 'B';
+unsigned int Host_Parameter_Set::UFS_Lane_Count = 2;
+double Host_Parameter_Set::UFS_Link_Efficiency = 0.80;//[ASSUMPTION: 8b10b]
 bool Host_Parameter_Set::Enable_ResponseTime_Logging = false;
 sim_time_type Host_Parameter_Set::ResponseTime_Logging_Period_Length = 400000;//nanoseconds
 std::string Host_Parameter_Set::Input_file_path;
@@ -31,6 +35,22 @@ void Host_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 
 	attr = "UFS_Processing_Delay";
 	val = std::to_string(UFS_Processing_Delay);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Gear";
+	val = std::to_string(UFS_Gear);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Rate_Series";
+	val = std::string(1, UFS_Rate_Series);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Lane_Count";
+	val = std::to_string(UFS_Lane_Count);
+	xmlwriter.Write_attribute_string(attr, val);
+
+	attr = "UFS_Link_Efficiency";
+	val = std::to_string(UFS_Link_Efficiency);
 	xmlwriter.Write_attribute_string(attr, val);
 
 	attr = "Enable_ResponseTime_Logging";
@@ -60,6 +80,34 @@ void Host_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 			} else if (strcmp(param->name(), "UFS_Processing_Delay") == 0) {
 				std::string val = param->value();
 				UFS_Processing_Delay = std::stoul(val);
+			} else if (strcmp(param->name(), "UFS_Gear") == 0) {
+				std::string val = param->value();
+				UFS_Gear = std::stoul(val);
+				if (UFS_Gear < 1 || UFS_Gear > 6) {
+					PRINT_ERROR("UFS_Gear must be between 1 and 6 (HS-GEAR6 is UFS 5.0)")
+				}
+			} else if (strcmp(param->name(), "UFS_Rate_Series") == 0) {
+				std::string val = param->value();
+				std::transform(val.begin(), val.end(), val.begin(), ::toupper);
+				if (val.compare("A") == 0) {
+					UFS_Rate_Series = 'A';
+				} else if (val.compare("B") == 0) {
+					UFS_Rate_Series = 'B';
+				} else {
+					PRINT_ERROR("UFS_Rate_Series must be A or B")
+				}
+			} else if (strcmp(param->name(), "UFS_Lane_Count") == 0) {
+				std::string val = param->value();
+				UFS_Lane_Count = std::stoul(val);
+				if (UFS_Lane_Count < 1 || UFS_Lane_Count > 2) {
+					PRINT_ERROR("UFS_Lane_Count must be 1 or 2 (the spec maximum is 2 lanes per direction)")
+				}
+			} else if (strcmp(param->name(), "UFS_Link_Efficiency") == 0) {
+				std::string val = param->value();
+				UFS_Link_Efficiency = std::stod(val);
+				if (UFS_Link_Efficiency <= 0.0 || UFS_Link_Efficiency > 1.0) {
+					PRINT_ERROR("UFS_Link_Efficiency must be in (0, 1]")
+				}
 			} else if (strcmp(param->name(), "Enable_ResponseTime_Logging") == 0) {
 				std::string val = param->value();
 				std::transform(val.begin(), val.end(), val.begin(), ::toupper);
