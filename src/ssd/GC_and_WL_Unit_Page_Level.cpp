@@ -94,6 +94,11 @@ namespace SSD_Components
 					while (!is_safe_gc_wl_candidate(pbke, gc_candidate_block_id) && repeat++ < block_no_per_plane) {
 						gc_candidate_block_id = random_generator.Uniform_uint(0, block_no_per_plane - 1);
 					}
+					//No safe candidate was found within the retry budget.
+					//Skip this GC opportunity rather than erasing an unvalidated block.
+					if (!is_safe_gc_wl_candidate(pbke, gc_candidate_block_id)) {
+						return;
+					}
 					break;
 				}
 				case SSD_Components::GC_Block_Selection_Policy_Type::RANDOM_P:
@@ -106,6 +111,11 @@ namespace SSD_Components
 						&& repeat++ < block_no_per_plane) {
 						gc_candidate_block_id = random_generator.Uniform_uint(0, block_no_per_plane - 1);
 					}
+					//No safe candidate was found within the retry budget.
+					//Skip this GC opportunity rather than erasing an unvalidated block.
+					if (pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block || !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id)) {
+						return;
+					}
 					break;
 				}
 				case SSD_Components::GC_Block_Selection_Policy_Type::RANDOM_PP:
@@ -114,15 +124,28 @@ namespace SSD_Components
 					unsigned int repeat = 0;
 
 					//The selected gc block should have a minimum number of invalid pages
-					while ((pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block 
+					while ((pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block
 						|| pbke->Blocks[gc_candidate_block_id].Invalid_page_count < random_pp_threshold
 						|| !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id))
 						&& repeat++ < block_no_per_plane) {
 						gc_candidate_block_id = random_generator.Uniform_uint(0, block_no_per_plane - 1);
 					}
+					//No safe candidate was found within the retry budget.
+					//Skip this GC opportunity rather than erasing an unvalidated block.
+					if (pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block
+						|| pbke->Blocks[gc_candidate_block_id].Invalid_page_count < random_pp_threshold
+						|| !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id)) {
+						return;
+					}
 					break;
 				}
 				case SSD_Components::GC_Block_Selection_Policy_Type::FIFO:
+					//A GC burst on a small device can pop this queue faster than new
+					//block allocations refill it. Skip this GC opportunity rather than
+					//popping an empty queue.
+					if (pbke->Block_usage_history.empty()) {
+						return;
+					}
 					gc_candidate_block_id = pbke->Block_usage_history.front();
 					pbke->Block_usage_history.pop();
 					break;

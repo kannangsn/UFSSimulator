@@ -29,9 +29,12 @@ namespace SSD_Components
 				delete dram_execution_queue[i].front();
 				dram_execution_queue[i].pop();
 			}
-			for (auto &req : waiting_user_requests_queue_for_dram_free_slot[i]) {
-				delete req;
-			}
+			//Requests still here are also still in the host interface's own
+			//Waiting_user_requests list. They are pushed there first, on
+			//arrival, and only removed once fully serviced. The host
+			//interface's destructor frees them. Freeing them here too would
+			//double free any request still waiting for a DRAM slot when the
+			//simulation ends.
 		}
 
 		delete data_cache;

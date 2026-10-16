@@ -236,7 +236,11 @@ namespace SSD_Components
 	
 	bool Flash_Block_Manager_Base::Is_page_valid(Block_Pool_Slot_Type* block, flash_page_ID_type page_id)
 	{
-		if ((block->Invalid_page_bitmap[page_id / 64] & (((uint64_t)1) << page_id)) == 0) {
+		//The bit position within the word must be page_id % 64, the same as
+		//the write side uses in Flash_Block_Manager.cpp. Shifting by the raw
+		//page_id here is undefined behavior for page_id >= 64, which is every
+		//page past the first word on any block bigger than 64 pages.
+		if ((block->Invalid_page_bitmap[page_id / 64] & (((uint64_t)1) << (page_id % 64))) == 0) {
 			return true;
 		}
 		return false;
