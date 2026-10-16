@@ -5,8 +5,8 @@
 //Remaining stubs land in Phase B (plan.md section 7): Day 5 doorbells/arbitration,
 //Day 6 command fetch, Day 7 completion path + interrupt aggregation.
 
-//Spec-fidelity guards for the on-the-wire structures (ufs-design.md section 2):
-//a padding surprise here would silently skew every link-transfer size
+//Spec-fidelity guards for the structures carried over the link (ufs-design.md
+//section 2). A padding surprise here would silently skew every link-transfer size.
 static_assert(sizeof(UTP_Transfer_Request_Descriptor) == 32, "UTRD must be 8 DWORDs (JESD223F 6.1.1)");
 static_assert(sizeof(UFS_Completion_Queue_Entry) == 32, "MCQ CQ entry must be 8 DWORDs (JESD223F 6.2.2)");
 static_assert(sizeof(UFS_Command_UPIU) == 32, "Command UPIU must be 32 bytes (JESD220G Table 10.13)");
@@ -206,8 +206,8 @@ namespace SSD_Components
 
 	void Host_Interface_UFS::Validate_simulation_config()
 	{
-		//ufs-design.md section 8 invariants; the config-parse-level checks land in
-		//Phase B Day 8 together with the XML parameters
+		//ufs-design.md section 8 validity conditions. The config-parse-level checks land
+		//in Phase B Day 8 together with the XML parameters
 		if (this->input_stream_manager == NULL) {
 			PRINT_ERROR("UFS host interface bad configuration: no input stream manager is set!")
 		}

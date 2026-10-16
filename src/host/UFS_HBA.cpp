@@ -8,7 +8,7 @@
 
 namespace Host_Components
 {
-	//Flow priority class -> SQATTRy.SQPL (0 = highest); UNDEFINED maps to the
+	//Flow priority class -> SQATTRy.SQPL (0 = highest). UNDEFINED maps to the
 	//lowest level (ufs-design.md section 4)
 	static uint8_t priority_class_to_sqpl(IO_Flow_Priority_Class::Priority priority_class)
 	{
@@ -20,7 +20,7 @@ namespace Host_Components
 		MQSimEngine::Sim_Object(id), sq_count(sq_count), cq_count(cq_count), queue_size(queue_size),
 		hba_processing_delay(hba_processing_delay), pcie_root_complex(pcie_root_complex), IO_flows(IO_flows)
 	{
-		//Address map per ufs-design.md section 1; SQPL is stamped from the owning
+		//Address map per ufs-design.md section 1. SQPL is stamped from the owning
 		//flow's priority class in Start_simulation, since IO_flows may not be
 		//populated yet at construction time (same lifecycle as SATA_HBA)
 		for (uint16_t q = 0; q < sq_count; q++) {
@@ -83,7 +83,7 @@ namespace Host_Components
 
 	void UFS_HBA::Validate_simulation_config()
 	{
-		//ufs-design.md section 8 invariants that are HBA-local; the config-level
+		//ufs-design.md section 8 validity conditions that are HBA-local. The config-level
 		//checks land with the XML parsing in Phase B Day 8
 		if (sq_count < 1 || sq_count > 32) {
 			PRINT_ERROR("UFS_HBA: SQ count must be between 1 and 32 (MCQCAP.MAXQ)")
