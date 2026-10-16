@@ -45,6 +45,19 @@ Example command line execution:
 $ MQSim.exe -i <SSD Configuration File> -w <Workload Definition File> 
 ```
 
+## Testing
+
+The regression checks for this fork are present under `tests/`. Running them only
+needs a build.
+
+```
+$ ./tests/regression/run_regression.sh
+```
+
+See `tests/README.md` for what the checks cover, a build pitfall worth
+knowing about, and where to find trace-based datasets beyond the two small
+traces already present under `traces/`.
+
 ## MQSim Execution Configurations 
 
 You can specify your preferred SSD configuration in the XML format. If the SSD configuration file specified in the command line does not exist, MQSim will create a sample XML file in the specified path. Here are the definitions of configuration parameters available in the XML file:

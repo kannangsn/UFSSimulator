@@ -1,5 +1,5 @@
-MQSim
-build/
+/MQSim
+/build/
 
-workload_scenario_*.xml
-*.log
+/workload_scenario_*.xml
+/*.log
