@@ -39,6 +39,7 @@ namespace Host_Components
 							nvme_queue_pair.Submission_queue_tail = 0;
 
 	class PCIe_Root_Complex;
+	class UFS_HBA;
 	class IO_Flow_Base : public MQSimEngine::Sim_Object, public MQSimEngine::Sim_Reporter
 	{
 	public:
@@ -55,6 +56,11 @@ namespace Host_Components
 		Submission_Queue_Entry* NVMe_read_sqe(uint64_t address);
 		const NVMe_Queue_Pair* Get_nvme_queue_pair_info();
 		virtual void SATA_consume_io_request(Host_IO_Request* request);
+		//UFS completions delegate to the virtual SATA consume path: the bookkeeping
+		//there (stats + next-request generation in the derived flows) is
+		//protocol-neutral per-request accounting, not the SATA link format
+		void UFS_consume_io_request(Host_IO_Request* request) { SATA_consume_io_request(request); }
+		void Set_ufs_hba(UFS_HBA* ufs_hba) { this->ufs_hba = ufs_hba; }//set by Host_System in UFS mode (plan.md section 7, Phase B Day 8)
 		LHA_type Get_start_lsa_on_device();
 		LHA_type Get_end_lsa_address_on_device();
 		uint32_t Get_generated_request_count();
@@ -76,6 +82,7 @@ namespace Host_Components
 		HostInterface_Types SSD_device_type;
 		PCIe_Root_Complex* pcie_root_complex;
 		SATA_HBA* sata_hba;
+		UFS_HBA* ufs_hba;//not a ctor parameter (unlike sata_hba): set via Set_ufs_hba after construction, since the UFS_HBA is created after the flows in Host_System
 		LHA_type start_lsa_on_device, end_lsa_on_device;
 
 		void Submit_io_request(Host_IO_Request*);

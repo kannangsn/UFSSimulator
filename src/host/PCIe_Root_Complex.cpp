@@ -1,10 +1,16 @@
 #include "PCIe_Root_Complex.h"
+#include "UFS_HBA.h"
 
 
 namespace Host_Components
 {
 	PCIe_Root_Complex::PCIe_Root_Complex(PCIe_Link* pcie_link, HostInterface_Types SSD_device_type, SATA_HBA* sata_hba, std::vector<Host_Components::IO_Flow_Base*>* IO_flows) :
-		pcie_link(pcie_link), SSD_device_type(SSD_device_type), sata_hba(sata_hba), IO_flows(IO_flows) {}
+		pcie_link(pcie_link), SSD_device_type(SSD_device_type), sata_hba(sata_hba), ufs_hba(NULL), IO_flows(IO_flows) {}
+
+	void PCIe_Root_Complex::Set_ufs_hba(UFS_HBA* ufs_hba)
+	{
+		this->ufs_hba = ufs_hba;
+	}
 
 	void PCIe_Root_Complex::Write_to_memory(const uint64_t address, const void* payload)
 	{
@@ -69,9 +75,22 @@ namespace Host_Components
 					new_pcie_message->Payload_size = sizeof(Submission_Queue_Entry);
 					break;
 				case HostInterface_Types::UFS:
-					//two-step UTRD/UCD fetch with UFS-specific payload sizes (UTRD is
-					//32 B, not sizeof(Submission_Queue_Entry)). Implemented in Phase B Day 6.
-					PRINT_ERROR("UFS command fetch is not implemented yet (plan.md section 7, Phase B Day 6)")
+					//two-step fetch (ufs-design.md section 3): the region-kind bits of
+					//the address say whether this is the UTRD read (32 B) or the UCD
+					//read (Command UPIU + PRDT, 48 B). The UFS payload sizes
+					//deliberately differ from NVMe's sizeof(Submission_Queue_Entry)
+					switch (UFS_MEMORY_REGION_KIND(address)) {
+						case 0x0://SQ ring: UTRD
+							new_pcie_message->Payload = ufs_hba->Read_utrd(address);
+							new_pcie_message->Payload_size = sizeof(UTP_Transfer_Request_Descriptor);
+							break;
+						case 0x1://UCD area: Command UPIU + PRDT
+							new_pcie_message->Payload = ufs_hba->Read_ucd(address);
+							new_pcie_message->Payload_size = sizeof(UFS_Command_UPIU) + sizeof(UFS_PRDT_Entry);
+							break;
+						default:
+							PRINT_ERROR("UFS: device read from an unknown host memory region!")
+					}
 					break;
 				default:
 					//this switch previously had no default case, so an unmatched type

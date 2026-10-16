@@ -1,6 +1,9 @@
 CC        := g++
 LD        := g++
-CC_FLAGS := -std=c++11 -O3 -g
+# -MMD -MP: emit header-dependency files next to each object. Without these, a
+# header edit rebuilds only directly-edited .cpp files, and objects compiled
+# against different struct layouts get linked together (silent ABI corruption).
+CC_FLAGS := -std=c++11 -O3 -g -MMD -MP
 
 MODULES   := exec host nvm_chip nvm_chip/flash_memory sim ssd utils
 SRC_DIR   := $(addprefix src/,$(MODULES)) src
@@ -35,3 +38,5 @@ clean:
 	rm -f MQSim
 
 $(foreach bdir,$(BUILD_DIR),$(eval $(call make-goal,$(bdir))))
+
+-include $(OBJ:.o=.d)

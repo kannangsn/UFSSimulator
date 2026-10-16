@@ -1,4 +1,5 @@
 #include "IO_Flow_Base.h"
+#include "UFS_HBA.h"
 #include "../ssd/Host_Interface_Defs.h"
 #include "../sim/Engine.h"
 
@@ -10,7 +11,7 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 						   IO_Flow_Priority_Class::Priority priority_class, sim_time_type stop_time, double initial_occupancy_ratio, unsigned int total_requets_to_be_generated,
 						   HostInterface_Types SSD_device_type, PCIe_Root_Complex *pcie_root_complex, SATA_HBA *sata_hba,
 						   bool enabled_logging, sim_time_type logging_period, std::string logging_file_path) : MQSimEngine::Sim_Object(name), flow_id(flow_id), start_lsa_on_device(start_lsa_on_device), end_lsa_on_device(end_lsa_on_device), io_queue_id(io_queue_id),
-																												priority_class(priority_class), stop_time(stop_time), initial_occupancy_ratio(initial_occupancy_ratio), total_requests_to_be_generated(total_requets_to_be_generated), SSD_device_type(SSD_device_type), pcie_root_complex(pcie_root_complex), sata_hba(sata_hba),
+																												priority_class(priority_class), stop_time(stop_time), initial_occupancy_ratio(initial_occupancy_ratio), total_requests_to_be_generated(total_requets_to_be_generated), SSD_device_type(SSD_device_type), pcie_root_complex(pcie_root_complex), sata_hba(sata_hba), ufs_hba(NULL),
 																												STAT_generated_request_count(0), STAT_generated_read_request_count(0), STAT_generated_write_request_count(0),
 																												STAT_ignored_request_count(0),
 																												STAT_serviced_request_count(0), STAT_serviced_read_request_count(0), STAT_serviced_write_request_count(0),
@@ -435,9 +436,11 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 				sata_hba->Submit_io_request(request);
 				break;
 			case HostInterface_Types::UFS:
-				//routes to UFS_HBA::Submit_io_request, mirroring the SATA branch.
-				//Implemented in Phase B Day 6.
-				PRINT_ERROR("UFS submission path is not implemented yet (plan.md section 7, Phase B Day 6)")
+				if (ufs_hba == NULL) {
+					PRINT_ERROR("UFS HBA is not connected to the IO flow (Set_ufs_hba was never called)!")
+				}
+				request->Source_flow_id = flow_id;
+				ufs_hba->Submit_io_request(request);
 				break;
 			default:
 				PRINT_ERROR("Unknown host interface type in IO_Flow_Base::Submit_io_request!")

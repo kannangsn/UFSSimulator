@@ -1,3 +1,4 @@
+#include <cstring>
 #include "UFS_HBA.h"
 #include "Host_Defs.h"
 #include "../ssd/Host_Interface_Defs.h"
@@ -55,9 +56,11 @@ namespace Host_Components
 	UFS_HBA::~UFS_HBA()
 	{
 		for (auto &sq : sq_rings) {
-			for (auto &req : sq->request_queue_in_memory) {
-				if (req) {
-					delete req;
+			//sq->queue owns the in-flight pointers. request_queue_in_memory holds
+			//duplicates of a subset of them (ring-slot view), so it is not walked
+			for (auto &req : sq->queue) {
+				if (req.second) {
+					delete req.second;
 				}
 			}
 			for (auto &req : sq->waiting_requests_for_submission) {
@@ -96,14 +99,60 @@ namespace Host_Components
 		}
 	}
 
+	bool UFS_HBA::enqueue_into_sq(UFS_SQ_Ring* ring, Host_IO_Request* request)
+	{
+		if (UFS_SQ_FULL(ring) || ring->available_task_tags.size() == 0) {
+			return false;
+		}
+		uint8_t task_tag = *ring->available_task_tags.begin();
+		if (ring->queue[task_tag] != NULL) {
+			PRINT_ERROR("Unexpected situation in UFS_HBA! Overwriting an unhandled I/O request in the queue!")
+		}
+		request->IO_queue_info = task_tag;
+		ring->queue[task_tag] = request;
+		ring->available_task_tags.erase(ring->available_task_tags.begin());
+		ring->request_queue_in_memory[ring->Submission_queue_tail] = request;
+		UFS_UPDATE_SQ_TAIL(ring);
+		request->Enqueue_time = Simulator->Time();
+		pcie_root_complex->Write_to_device(ring->Submission_tail_register_address_on_device, ring->Submission_queue_tail);
+		return true;
+	}
+
 	void UFS_HBA::Execute_simulator_event(MQSimEngine::Sim_Event* event)
 	{
-		PRINT_ERROR("UFS_HBA::Execute_simulator_event is not implemented yet (Phase B Day 6)")
+		switch ((UFS_HBA_Sim_Events)event->Type)
+		{
+			case UFS_HBA_Sim_Events::SUBMIT_IO_REQUEST:
+			{
+				Host_IO_Request* request = host_requests.front();
+				host_requests.pop();
+
+				if (request->Source_flow_id >= sq_count) {
+					PRINT_ERROR("UFS_HBA: I/O request submitted from a flow with no submission queue!")
+				}
+				UFS_SQ_Ring* ring = sq_rings[request->Source_flow_id];
+				if (!enqueue_into_sq(ring, request)) {
+					ring->waiting_requests_for_submission.push_back(request);
+				}
+
+				if (host_requests.size() > 0) {
+					Simulator->Register_sim_event(Simulator->Time() + hba_processing_delay, this, NULL, static_cast<int>(UFS_HBA_Sim_Events::SUBMIT_IO_REQUEST));
+				}
+				break;
+			}
+			case UFS_HBA_Sim_Events::CONSUME_IO_REQUEST:
+				//completion consumption lands in Phase B Day 7
+				PRINT_ERROR("UFS_HBA: completion consumption is not implemented yet (plan.md section 7, Phase B Day 7)")
+				break;
+		}
 	}
 
 	void UFS_HBA::Submit_io_request(Host_IO_Request* request)
 	{
-		PRINT_ERROR("UFS_HBA::Submit_io_request is not implemented yet (Phase B Day 6)")
+		host_requests.push(request);
+		if (host_requests.size() == 1) {
+			Simulator->Register_sim_event(Simulator->Time() + hba_processing_delay, this, NULL, static_cast<int>(UFS_HBA_Sim_Events::SUBMIT_IO_REQUEST));
+		}
 	}
 
 	void UFS_HBA::UFS_consume_io_request(UFS_Completion_Queue_Entry* cqe)
@@ -113,12 +162,63 @@ namespace Host_Components
 
 	UTP_Transfer_Request_Descriptor* UFS_HBA::Read_utrd(uint64_t address)
 	{
-		PRINT_ERROR("UFS_HBA::Read_utrd is not implemented yet (Phase B Day 6)")
+		//Device DMA read of an SQ ring slot (two-step fetch, step 1). The UTRD's
+		//interpreted content is the UCD pointer. The rest is carried for fidelity.
+		uint16_t sq_id = UFS_MEMORY_QUEUE_ID(address);
+		if (sq_id >= sq_count) {
+			PRINT_ERROR("UFS_HBA: UTRD read from an unknown submission queue!")
+		}
+		UFS_SQ_Ring* ring = sq_rings[sq_id];
+		uint16_t slot = (uint16_t)((address - ring->Submission_queue_memory_base_address) / sizeof(UTP_Transfer_Request_Descriptor));
+		if (slot >= ring->Submission_queue_size || ring->request_queue_in_memory[slot] == NULL) {
+			PRINT_ERROR("UFS_HBA: UTRD read from an empty or out-of-range ring slot!")
+		}
+
+		uint64_t ucd_address = ring->UCD_area_memory_base_address + (uint64_t)slot * 0x100;
+		UTP_Transfer_Request_Descriptor* utrd = new UTP_Transfer_Request_Descriptor;
+		utrd->DW0_Header = 0x10000000;//Command Type = 01h (SCSI), interrupt/crypto bits clear
+		utrd->DW1_DUN_Lower = 0;
+		utrd->DW2_OCS = 0x0F;//invalid-by-default. In MCQ mode the real OCS is in the CQ entry
+		utrd->DW3_DUN_Upper = 0;
+		utrd->DW4_UCD_Base_Lower = (uint32_t)ucd_address;
+		utrd->DW5_UCD_Base_Upper = (uint32_t)(ucd_address >> 32);
+		utrd->DW6_Response_UPIU = (16 << 16) | 8; //response at UCD+0x40: offset 16 DWords, length 8 DWords
+		utrd->DW7_PRDT = (24 << 16) | 1;          //PRDT at UCD+0x60: offset 24 DWords, 1 entry
+		return utrd;
 	}
 
 	UFS_Command_UPIU* UFS_HBA::Read_ucd(uint64_t address)
 	{
-		PRINT_ERROR("UFS_HBA::Read_ucd is not implemented yet (Phase B Day 6)")
+		//Device DMA read of the UCD (two-step fetch, step 2): Command UPIU + PRDT.
+		//The returned UPIU pointer becomes User_Request::IO_command_info on the
+		//device side and is freed there via DELETE_REQUEST_UFS.
+		uint16_t sq_id = UFS_MEMORY_QUEUE_ID(address);
+		if (sq_id >= sq_count) {
+			PRINT_ERROR("UFS_HBA: UCD read from an unknown submission queue!")
+		}
+		UFS_SQ_Ring* ring = sq_rings[sq_id];
+		uint16_t slot = (uint16_t)((address - ring->UCD_area_memory_base_address) / 0x100);
+		if (slot >= ring->Submission_queue_size || ring->request_queue_in_memory[slot] == NULL) {
+			PRINT_ERROR("UFS_HBA: UCD read from an empty or out-of-range ring slot!")
+		}
+		Host_IO_Request* request = ring->request_queue_in_memory[slot];
+
+		UFS_Command_UPIU* upiu = new UFS_Command_UPIU;
+		memset(upiu, 0, sizeof(UFS_Command_UPIU));
+		upiu->Transaction_Type = 0x01;//COMMAND UPIU
+		upiu->Flags = (request->Type == Host_IO_Request_Type::READ) ? 0x40 : 0x20;//R / W flag bits
+		upiu->LUN = (uint8_t)sq_id;//flow = LU (ufs-design.md section 5)
+		upiu->Task_Tag = (uint8_t)request->IO_queue_info;
+		upiu->Expected_Data_Transfer_Length = request->LBA_count * SECTOR_SIZE_IN_BYTE;
+		//CDB: READ(16)/WRITE(16). 8-byte big-endian LBA, 4-byte big-endian length
+		upiu->CDB[0] = (request->Type == Host_IO_Request_Type::READ) ? UFS_READ_OPCODE : UFS_WRITE_OPCODE;
+		for (int i = 0; i < 8; i++) {
+			upiu->CDB[2 + i] = (uint8_t)(request->Start_LBA >> (8 * (7 - i)));
+		}
+		for (int i = 0; i < 4; i++) {
+			upiu->CDB[10 + i] = (uint8_t)(request->LBA_count >> (8 * (3 - i)));
+		}
+		return upiu;
 	}
 
 	const UFS_SQ_Ring* UFS_HBA::Get_sq_ring_info(uint16_t sq_id)

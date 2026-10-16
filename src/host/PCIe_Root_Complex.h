@@ -15,6 +15,7 @@ namespace Host_Components
 	class PCIe_Link;
 	class IO_Flow_Base;
 	class SATA_HBA;
+	class UFS_HBA;
 	class PCIe_Root_Complex
 	{
 	public:
@@ -38,10 +39,12 @@ namespace Host_Components
 		
 		void Write_to_device(uint64_t address, uint16_t write_value);
 		void Set_io_flows(std::vector<Host_Components::IO_Flow_Base*>* IO_flows);
+		void Set_ufs_hba(UFS_HBA* ufs_hba);
 	private:
 		PCIe_Link* pcie_link;
 		HostInterface_Types SSD_device_type;
 		SATA_HBA * sata_hba;
+		UFS_HBA * ufs_hba;
 		std::vector<Host_Components::IO_Flow_Base*>* IO_flows;
 		
 		void Write_to_memory(const uint64_t address, const void* payload);

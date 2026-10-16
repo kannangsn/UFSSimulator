@@ -14,9 +14,11 @@ enum class HostInterface_Types { SATA, NVME, UFS };
 #define SATA_WRITE_OPCODE 0x0001
 #define SATA_READ_OPCODE 0x0002
 
-//SCSI opcodes carried in the UFS Command UPIU's CDB (JESD220G clause 11)
-#define UFS_READ_OPCODE 0x28  //SCSI READ(10)
-#define UFS_WRITE_OPCODE 0x2A //SCSI WRITE(10)
+//SCSI opcodes carried in the UFS Command UPIU's CDB (JESD220G clause 11).
+//READ(16)/WRITE(16) rather than the (10) variants: LHA_type is 64-bit and
+//READ(10)'s 32-bit LBA field would silently truncate large addresses.
+#define UFS_READ_OPCODE 0x88  //SCSI READ(16)
+#define UFS_WRITE_OPCODE 0x8A //SCSI WRITE(16)
 
 const uint64_t NCQ_SUBMISSION_REGISTER = 0x1000;
 const uint64_t NCQ_COMPLETION_REGISTER = 0x1003;

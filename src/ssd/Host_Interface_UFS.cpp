@@ -165,12 +165,27 @@ namespace SSD_Components
 
 	void Input_Stream_Manager_UFS::Handle_new_arrived_request(User_Request* request)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::Handle_new_arrived_request is not implemented yet (Phase B Day 6)")
+		Input_Stream_UFS* stream = (Input_Stream_UFS*)input_streams[request->Stream_id];
+		stream->Submission_head_informed_to_host++;
+		if (stream->Submission_head_informed_to_host == stream->Submission_queue_size) {
+			stream->Submission_head_informed_to_host = 0;//circular ring
+		}
+		if (request->Type == UserRequestType::READ) {
+			stream->Waiting_user_requests.push_back(request);
+			stream->STAT_number_of_read_requests++;
+			segment_user_request(request);
+			((Host_Interface_UFS*)host_interface)->broadcast_user_request_arrival_signal(request);
+		} else {//write: the data phase (DATA OUT UPIUs) must arrive before segmentation
+			stream->Waiting_user_requests.push_back(request);
+			stream->STAT_number_of_write_requests++;
+			((Host_Interface_UFS*)host_interface)->request_fetch_unit->Fetch_write_data(request);
+		}
 	}
 
 	void Input_Stream_Manager_UFS::Handle_arrived_write_data(User_Request* request)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::Handle_arrived_write_data is not implemented yet (Phase B Day 6)")
+		segment_user_request(request);
+		((Host_Interface_UFS*)host_interface)->broadcast_user_request_arrival_signal(request);
 	}
 
 	void Input_Stream_Manager_UFS::Handle_serviced_request(User_Request* request)
@@ -195,7 +210,45 @@ namespace SSD_Components
 
 	void Input_Stream_Manager_UFS::segment_user_request(User_Request* user_request)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::segment_user_request is not implemented yet (Phase B Day 6)")
+		//Protocol-neutral request segmentation, same logic as the NVMe/SATA path
+		Input_Stream_UFS* stream = (Input_Stream_UFS*)input_streams[user_request->Stream_id];
+		LHA_type lsa = user_request->Start_LBA;
+		unsigned int req_size = user_request->SizeInSectors;
+
+		page_status_type access_status_bitmap = 0;
+		unsigned int handled_sectors_count = 0;
+		unsigned int transaction_size = 0;
+		while (handled_sectors_count < req_size) {
+			//Check if LSA is in the correct range allocated to the stream
+			if (lsa < stream->Start_logical_sector_address || lsa > stream->End_logical_sector_address) {
+				lsa = stream->Start_logical_sector_address + (lsa % (stream->End_logical_sector_address - stream->Start_logical_sector_address));
+			}
+			LHA_type internal_lsa = lsa - stream->Start_logical_sector_address;//per-flow LSAs are translated into a range starting from zero
+
+			transaction_size = host_interface->sectors_per_page - (unsigned int)(lsa % host_interface->sectors_per_page);
+			if (handled_sectors_count + transaction_size >= req_size) {
+				transaction_size = req_size - handled_sectors_count;
+			}
+			LPA_type lpa = internal_lsa / host_interface->sectors_per_page;
+
+			page_status_type temp = ~(0xffffffffffffffff << (int)transaction_size);
+			access_status_bitmap = temp << (int)(internal_lsa % host_interface->sectors_per_page);
+
+			if (user_request->Type == UserRequestType::READ) {
+				NVM_Transaction_Flash_RD* transaction = new NVM_Transaction_Flash_RD(Transaction_Source_Type::USERIO, user_request->Stream_id,
+					transaction_size * SECTOR_SIZE_IN_BYTE, lpa, NO_PPA, user_request, user_request->Priority_class, 0, access_status_bitmap, CurrentTimeStamp);
+				user_request->Transaction_list.push_back(transaction);
+				stream->STAT_number_of_read_transactions++;
+			} else {//UserRequestType::WRITE
+				NVM_Transaction_Flash_WR* transaction = new NVM_Transaction_Flash_WR(Transaction_Source_Type::USERIO, user_request->Stream_id,
+					transaction_size * SECTOR_SIZE_IN_BYTE, lpa, user_request, user_request->Priority_class, 0, access_status_bitmap, CurrentTimeStamp);
+				user_request->Transaction_list.push_back(transaction);
+				stream->STAT_number_of_write_transactions++;
+			}
+
+			lsa = lsa + transaction_size;
+			handled_sectors_count += transaction_size;
+		}
 	}
 
 	void Input_Stream_Manager_UFS::inform_host_request_completed(stream_id_type stream_id, User_Request* request)
@@ -231,14 +284,36 @@ namespace SSD_Components
 			sizeof(UTP_Transfer_Request_Descriptor));
 	}
 
+	//Per-UPIU header overhead for data transfers (ufs-design.md sections 2.1, 3
+	//step 6): each DATA IN/OUT UPIU carries a 24-byte header, and one UPIU moves at
+	//most 64 KB of data segment, so large transfers pay one header per 64 KB chunk
+	static unsigned int data_upiu_header_overhead(unsigned int data_size_in_bytes)
+	{
+		unsigned int upiu_count = (data_size_in_bytes + 65535) / 65536;
+		if (upiu_count == 0) {
+			upiu_count = 1;
+		}
+		return 24 * upiu_count;
+	}
+
 	void Request_Fetch_Unit_UFS::Fetch_write_data(User_Request* request)
 	{
-		PRINT_ERROR("Request_Fetch_Unit_UFS::Fetch_write_data is not implemented yet (Phase B Day 6)")
+		UFS_DMA_Req_Item* dma_req_item = new UFS_DMA_Req_Item;
+		dma_req_item->Type = UFS_DMA_Req_Type::WRITE_DATA;
+		dma_req_item->object = (void*)request;
+		ufs_dma_list.push_back(dma_req_item);
+
+		//The PRDT points at dummy data addresses (like NVMe's PRPs). DATA OUT UPIU
+		//header overhead is added to the modeled transfer size
+		host_interface->Send_read_message_to_host(DATA_MEMORY_REGION,
+			request->Size_in_byte + data_upiu_header_overhead(request->Size_in_byte));
 	}
 
 	void Request_Fetch_Unit_UFS::Send_read_data(User_Request* request)
 	{
-		PRINT_ERROR("Request_Fetch_Unit_UFS::Send_read_data is not implemented yet (Phase B Day 6)")
+		//DATA IN UPIU(s): payload plus one 24-byte header per 64 KB data segment
+		host_interface->Send_write_message_to_host(DATA_MEMORY_REGION, request->Data,
+			request->Size_in_byte + data_upiu_header_overhead(request->Size_in_byte));
 	}
 
 	void Request_Fetch_Unit_UFS::Send_completion_entry(User_Request* request)
@@ -271,7 +346,70 @@ namespace SSD_Components
 
 	void Request_Fetch_Unit_UFS::Process_pcie_read_message(uint64_t address, void* payload, unsigned int payload_size)
 	{
-		PRINT_ERROR("Request_Fetch_Unit_UFS::Process_pcie_read_message is not implemented yet (Phase B Day 6)")
+		Host_Interface_UFS* hi = (Host_Interface_UFS*)host_interface;
+		UFS_DMA_Req_Item* dma_req_item = ufs_dma_list.front();
+		ufs_dma_list.pop_front();
+
+		switch (dma_req_item->Type) {
+			case UFS_DMA_Req_Type::UTRD:
+			{
+				//Step 1 arrived: the UTRD's interpreted content is the UCD pointer.
+				//Issue step 2, the UCD read (Command UPIU + PRDT, 48 bytes).
+				stream_id_type stream_id = (stream_id_type)(intptr_t)dma_req_item->object;
+				UTP_Transfer_Request_Descriptor* utrd = (UTP_Transfer_Request_Descriptor*)payload;
+				uint64_t ucd_address = ((uint64_t)utrd->DW5_UCD_Base_Upper << 32) | utrd->DW4_UCD_Base_Lower;
+				delete utrd;
+
+				UFS_DMA_Req_Item* ucd_item = new UFS_DMA_Req_Item;
+				ucd_item->Type = UFS_DMA_Req_Type::UCD;
+				ucd_item->object = (void*)(intptr_t)stream_id;
+				ufs_dma_list.push_back(ucd_item);
+				host_interface->Send_read_message_to_host(ucd_address, sizeof(UFS_Command_UPIU) + sizeof(UFS_PRDT_Entry));
+				break;
+			}
+			case UFS_DMA_Req_Type::UCD:
+			{
+				//Step 2 arrived: parse the Command UPIU into a User_Request
+				User_Request* new_request = new User_Request;
+				new_request->IO_command_info = payload;//freed via DELETE_REQUEST_UFS
+				new_request->Stream_id = (stream_id_type)(intptr_t)dma_req_item->object;
+				new_request->Priority_class = ((Input_Stream_Manager_UFS*)host_interface->input_stream_manager)->Get_priority_class(new_request->Stream_id);
+				new_request->STAT_InitiationTime = Simulator->Time();
+				UFS_Command_UPIU* upiu = (UFS_Command_UPIU*)payload;
+				//CDB: READ(16)/WRITE(16). 8-byte big-endian LBA at bytes 2-9,
+				//4-byte big-endian transfer length (in sectors) at bytes 10-13
+				LHA_type lba = 0;
+				for (int i = 0; i < 8; i++) {
+					lba = (lba << 8) | upiu->CDB[2 + i];
+				}
+				uint32_t lba_count = 0;
+				for (int i = 0; i < 4; i++) {
+					lba_count = (lba_count << 8) | upiu->CDB[10 + i];
+				}
+				switch (upiu->CDB[0]) {
+					case UFS_READ_OPCODE:
+						new_request->Type = UserRequestType::READ;
+						break;
+					case UFS_WRITE_OPCODE:
+						new_request->Type = UserRequestType::WRITE;
+						break;
+					default:
+						throw std::invalid_argument("UFS command is not supported!");
+				}
+				new_request->Start_LBA = lba;
+				new_request->SizeInSectors = lba_count;
+				new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+				((Input_Stream_Manager_UFS*)(hi->input_stream_manager))->Handle_new_arrived_request(new_request);
+				break;
+			}
+			case UFS_DMA_Req_Type::WRITE_DATA:
+				COPYDATA(((User_Request*)dma_req_item->object)->Data, payload, payload_size);
+				((Input_Stream_Manager_UFS*)(hi->input_stream_manager))->Handle_arrived_write_data((User_Request*)dma_req_item->object);
+				break;
+			default:
+				break;
+		}
+		delete dma_req_item;
 	}
 
 	Host_Interface_UFS::Host_Interface_UFS(const sim_object_id_type& id, LHA_type max_logical_sector_address,

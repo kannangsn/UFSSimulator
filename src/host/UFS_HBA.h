@@ -6,6 +6,7 @@
 #include <set>
 #include <list>
 #include <queue>
+#include <unordered_map>
 #include "../sim/Sim_Defs.h"
 #include "../sim/Sim_Object.h"
 #include "Host_IO_Request.h"
@@ -40,7 +41,8 @@ namespace Host_Components
 		uint64_t Submission_queue_memory_base_address;      //UFS_SQ_MEMORY(SQ_id)
 		uint64_t UCD_area_memory_base_address;              //UFS_UCD_MEMORY(SQ_id, 0)
 		std::set<uint8_t> available_task_tags;
-		std::vector<Host_IO_Request*> request_queue_in_memory;
+		std::unordered_map<uint16_t, Host_IO_Request*> queue;//in-flight requests keyed by task tag (completion lookup, Day 7). The authoritative owner of in-flight pointers
+		std::vector<Host_IO_Request*> request_queue_in_memory;//ring-slot view of the same requests, addressed by the device's UTRD/UCD reads. Slots are overwritten on ring wrap
 		std::list<Host_IO_Request*> waiting_requests_for_submission;//ring full or no free tag
 	};
 
@@ -85,6 +87,8 @@ namespace Host_Components
 		std::vector<Host_Components::IO_Flow_Base*>* IO_flows;
 		std::vector<UFS_SQ_Ring*> sq_rings;
 		std::vector<UFS_CQ_Ring*> cq_rings;
+		//enqueue into the ring + ring the SQ tail doorbell. False if ring full / no tag
+		bool enqueue_into_sq(UFS_SQ_Ring* ring, Host_IO_Request* request);
 		void Update_and_submit_cq_head(uint16_t cq_id);
 		std::queue<UFS_Completion_Queue_Entry*> consume_requests;
 		std::queue<Host_IO_Request*> host_requests;
