@@ -162,6 +162,7 @@ namespace Utils
 	double Logical_Address_Partitioning_Unit::Get_share_of_physcial_pages_in_plane(flash_channel_ID_type channel_id, flash_chip_ID_type chip_id, flash_die_ID_type die_id, flash_plane_ID_type plane_id)
 	{
 		switch (hostinterface_type) {
+			case HostInterface_Types::UFS://UFS LUs partition the LHA space per stream, like NVMe
 			case HostInterface_Types::NVME:
 				return 1.0 / double(resource_list[channel_id][chip_id][die_id][plane_id]);
 			case HostInterface_Types::SATA:
@@ -179,6 +180,7 @@ namespace Utils
 				case HostInterface_Types::SATA:
 					return start_lhas_per_flow[stream_id];
 					break;
+				case HostInterface_Types::UFS://UFS LUs partition the LHA space per stream, like NVMe
 				case HostInterface_Types::NVME:
 					return start_lhas_per_flow[stream_id];
 					break;
@@ -197,6 +199,7 @@ namespace Utils
 				case HostInterface_Types::SATA:
 					return end_lhas_per_flow[stream_id];
 					break;
+				case HostInterface_Types::UFS://UFS LUs partition the LHA space per stream, like NVMe
 				case HostInterface_Types::NVME:
 					return end_lhas_per_flow[stream_id];
 					break;
@@ -214,6 +217,7 @@ namespace Utils
 				case HostInterface_Types::SATA:
 					return (end_lhas_per_flow[stream_id] - start_lhas_per_flow[stream_id] + 1);
 					break;
+				case HostInterface_Types::UFS://UFS LUs partition the LHA space per stream, like NVMe
 				case HostInterface_Types::NVME:
 					return (end_lhas_per_flow[stream_id] - start_lhas_per_flow[stream_id] + 1);
 					break;
@@ -231,6 +235,7 @@ namespace Utils
 				case HostInterface_Types::SATA://It is not possible to differentiate between streams inside the device when a SATA host interface is used, so all lha space is available to all streams
 					return total_lha_no;
 					break;
+				case HostInterface_Types::UFS://UFS LUs partition the LHA space per stream, like NVMe
 				case HostInterface_Types::NVME:
 					return (end_lhas_per_flow[stream_id] - start_lhas_per_flow[stream_id] + 1);
 					break;
@@ -247,6 +252,7 @@ namespace Utils
 			switch (hostinterface_type) {
 				case HostInterface_Types::SATA://It is not possible to differentiate between streams inside the device when a SATA host interface is used, so all lha space is available to all streams
 					return total_pda_no;
+				case HostInterface_Types::UFS://UFS LUs partition the LHA space per stream, like NVMe
 				case HostInterface_Types::NVME:
 					return pdas_per_flow[stream_id];
 					break;

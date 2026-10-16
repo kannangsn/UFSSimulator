@@ -228,6 +228,7 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 				}
 				break;
 			}
+			case HostInterface_Types::UFS://UFS LUs partition flash resources per stream, like NVMe namespaces
 			case HostInterface_Types::NVME:
 			{
 				stream_count = (unsigned int)io_flows->size();
@@ -360,7 +361,14 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 																			 parameters->IO_Queue_Depth, Utils::Logical_Address_Partitioning_Unit::Get_total_device_lha_count(), parameters->Flash_Parameters.Page_Capacity / SECTOR_SIZE_IN_BYTE, dcm);
 
 			break;
+		case HostInterface_Types::UFS:
+			//Host_Interface_UFS construction is implemented in Phase B Day 8, together with
+			//the UFS parameters in Device_Parameter_Set. Must exit with an explicit error until then.
+			//Falling through would hand an unassigned pointer to Simulator->AddObject.
+			PRINT_ERROR("UFS host interface construction is not implemented yet (plan.md section 7, Phase B Day 8)")
+			break;
 		default:
+			PRINT_ERROR("Unknown host interface type in SSD_Device!")
 			break;
 		}
 		Simulator->AddObject(device->Host_interface);

@@ -77,6 +77,9 @@ void Device_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 		case HostInterface_Types::SATA:
 			val = "SATA";
 			break;
+		case HostInterface_Types::UFS:
+			val = "UFS";
+			break;
 		default:
 			break;
 	}
@@ -399,6 +402,8 @@ void Device_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 					HostInterface_Type = HostInterface_Types::NVME;
 				} else if (strcmp(val.c_str(), "SATA") == 0) {
 					HostInterface_Type = HostInterface_Types::SATA;
+				} else if (strcmp(val.c_str(), "UFS") == 0) {
+					HostInterface_Type = HostInterface_Types::UFS;
 				} else {
 					PRINT_ERROR("Unknown host interface type specified in the SSD configuration file")
 				}

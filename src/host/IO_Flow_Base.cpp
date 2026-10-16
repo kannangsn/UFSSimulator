@@ -106,11 +106,15 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 			break;
 		}
 		break;
+	case HostInterface_Types::UFS:
+		//SQ/CQ rings are owned by the UFS_HBA (plan.md section 5.2), not per flow.
+		//Nothing to set up here. Flow-to-SQ routing is implemented in Phase B Day 6.
+		break;
 	default:
 		break;
 	}
 	}
-	
+
 	IO_Flow_Base::~IO_Flow_Base()
 	{
 		log_file.close();
@@ -129,6 +133,9 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 				}
 				break;
 			case HostInterface_Types::SATA:
+				break;
+			case HostInterface_Types::UFS:
+				//in-flight requests are tracked by the UFS_HBA, nothing flow-owned to free
 				break;
 			default:
 				PRINT_ERROR("Unsupported host interface type in IO_Flow_Base!")
@@ -427,6 +434,13 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 				request->Source_flow_id = flow_id;
 				sata_hba->Submit_io_request(request);
 				break;
+			case HostInterface_Types::UFS:
+				//routes to UFS_HBA::Submit_io_request, mirroring the SATA branch.
+				//Implemented in Phase B Day 6.
+				PRINT_ERROR("UFS submission path is not implemented yet (plan.md section 7, Phase B Day 6)")
+				break;
+			default:
+				PRINT_ERROR("Unknown host interface type in IO_Flow_Base::Submit_io_request!")
 		}
 	}
 

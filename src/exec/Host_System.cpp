@@ -14,7 +14,7 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 	Simulator->AddObject(this);
 
 	//Create the main components of the host system
-	if (((SSD_Components::Host_Interface_NVMe*)ssd_host_interface)->GetType() == HostInterface_Types::SATA) {
+	if (ssd_host_interface->GetType() == HostInterface_Types::SATA) {
 		this->SATA_hba = new Host_Components::SATA_HBA(ID() + ".SATA_HBA", ((SSD_Components::Host_Interface_SATA*)ssd_host_interface)->Get_ncq_depth(), parameters->SATA_Processing_Delay, NULL, NULL);
 	} else {
 		this->SATA_hba = NULL;
@@ -33,10 +33,14 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 		//No flow should ask for I/O queue id 0, it is reserved for NVMe Admin command queue pair
 		//Hence, we use flow_id + 1 (which is equal to 1, 2, ...) as the requested I/O queue id
 		uint16_t nvme_sq_size = 0, nvme_cq_size = 0;
-		switch (((SSD_Components::Host_Interface_NVMe*)ssd_host_interface)->GetType()) {
+		switch (ssd_host_interface->GetType()) {
 			case HostInterface_Types::NVME:
 				nvme_sq_size = ((SSD_Components::Host_Interface_NVMe*)ssd_host_interface)->Get_submission_queue_depth();
 				nvme_cq_size = ((SSD_Components::Host_Interface_NVMe*)ssd_host_interface)->Get_completion_queue_depth();
+				break;
+			case HostInterface_Types::UFS:
+				//UFS queue geometry is in the UFS_HBA, not in per-flow queue-pair
+				//parameters (plan.md section 5.2). Implemented in Phase B Day 8.
 				break;
 			default:
 				break;
@@ -80,7 +84,7 @@ Host_System::Host_System(Host_Parameter_Set* parameters, bool preconditioning_re
 		Simulator->AddObject(io_flow);
 	}
 	this->PCIe_root_complex->Set_io_flows(&this->IO_flows);
-	if (((SSD_Components::Host_Interface_NVMe*)ssd_host_interface)->GetType() == HostInterface_Types::SATA) {
+	if (ssd_host_interface->GetType() == HostInterface_Types::SATA) {
 		this->SATA_hba->Set_io_flows(&this->IO_flows);
 		this->SATA_hba->Set_root_complex(this->PCIe_root_complex);
 	}
@@ -125,6 +129,11 @@ void Host_System::Start_simulation()
 		case HostInterface_Types::SATA:
 			((SSD_Components::Host_Interface_SATA*) ssd_device->Host_interface)->Set_ncq_address(
 				SATA_hba->Get_sata_ncq_info()->Submission_queue_memory_base_address, SATA_hba->Get_sata_ncq_info()->Completion_queue_memory_base_address);
+			break;
+		case HostInterface_Types::UFS:
+			//UFS_HBA <-> Host_Interface_UFS stream/ring connection lands in Phase B Day 8
+			PRINT_ERROR("UFS host-interface integration is not implemented yet (plan.md section 7, Phase B Day 8)")
+			break;
 		default:
 			break;
 	}

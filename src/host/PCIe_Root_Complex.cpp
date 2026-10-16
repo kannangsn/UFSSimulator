@@ -22,6 +22,10 @@ namespace Host_Components
 				case HostInterface_Types::SATA:
 					sata_hba->SATA_consume_io_request((Completion_Queue_Entry*)payload);
 					break;
+				case HostInterface_Types::UFS:
+					//routes UFS_Completion_Queue_Entry to the UFS_HBA. Implemented in Phase B Day 7.
+					PRINT_ERROR("UFS completion consumption is not implemented yet (plan.md section 7, Phase B Day 7)")
+					break;
 				default:
 					PRINT_ERROR("Uknown Host Interface type in PCIe_Root_Complex")
 			}
@@ -64,6 +68,16 @@ namespace Host_Components
 					new_pcie_message->Payload = sata_hba->Read_ncq_entry(address);
 					new_pcie_message->Payload_size = sizeof(Submission_Queue_Entry);
 					break;
+				case HostInterface_Types::UFS:
+					//two-step UTRD/UCD fetch with UFS-specific payload sizes (UTRD is
+					//32 B, not sizeof(Submission_Queue_Entry)). Implemented in Phase B Day 6.
+					PRINT_ERROR("UFS command fetch is not implemented yet (plan.md section 7, Phase B Day 6)")
+					break;
+				default:
+					//this switch previously had no default case, so an unmatched type
+					//fell through without setting new_pcie_message->Payload, leaving it
+					//uninitialized instead of triggering an explicit error (see plan.md section 6)
+					PRINT_ERROR("Unknown Host Interface type in PCIe_Root_Complex")
 			}
 		}
 
