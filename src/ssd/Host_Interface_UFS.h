@@ -15,6 +15,9 @@
 
 namespace SSD_Components
 {
+//Sentinel returned by SQ arbitration when no queue is eligible to fetch from
+#define UFS_NO_ELIGIBLE_SQ ((stream_id_type)0xFFFF)
+
 //UFS analogue of DELETE_REQUEST_NVME. The NVMe macro deletes IO_command_info
 //through a Submission_Queue_Entry* cast. For UFS, IO_command_info holds the
 //fetched UFS_Command_UPIU (ufs-design.md section 3 step 4) and must be deleted
@@ -102,8 +105,12 @@ private:
 	void segment_user_request(User_Request* user_request);
 	void inform_host_request_completed(stream_id_type stream_id, User_Request* request);
 	//Arbitration across nonempty SQs: RR pointer, or lowest-SQPL-first with RR among
-	//equals (ufs-design.md section 4). Implemented Phase B Day 5.
+	//equals (ufs-design.md section 4). Returns UFS_NO_ELIGIBLE_SQ when nothing to fetch.
 	stream_id_type arbitrate_next_submission_queue();
+	//The fetch pump: issues UTRD fetches, one arbitration decision at a time, while
+	//the device-wide MAC cap and the per-queue fetch window allow
+	void fetch_pending_requests();
+	UFS_Completion_Queue_Context* find_completion_queue(uint16_t cq_id);
 
 	uint16_t Queue_fetch_size;
 	UFS_Arbitration_Type arbitration;

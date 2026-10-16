@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include "Host_Interface_UFS.h"
 #include "../host/Host_Defs.h"
 #include "../sim/Engine.h"
@@ -80,12 +81,86 @@ namespace SSD_Components
 
 	void Input_Stream_Manager_UFS::SQ_tail_pointer_update(stream_id_type stream_id, uint16_t tail_pointer_value)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::SQ_tail_pointer_update is not implemented yet (Phase B Day 5)")
+		if (stream_id >= input_streams.size()) {
+			PRINT_ERROR("UFS host interface: SQ tail doorbell rung for an unknown submission queue!")
+		}
+		((Input_Stream_UFS*)input_streams[stream_id])->Submission_tail = tail_pointer_value;
+		fetch_pending_requests();
 	}
 
 	void Input_Stream_Manager_UFS::CQ_head_pointer_update(uint16_t cq_id, uint16_t head_pointer_value)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::CQ_head_pointer_update is not implemented yet (Phase B Day 5)")
+		UFS_Completion_Queue_Context* cq_context = find_completion_queue(cq_id);
+		cq_context->Completion_head = head_pointer_value;
+
+		//The host freed CQ slots. Deliver a completion that was blocked on a full
+		//ring, if any (filled by Handle_serviced_request, Phase B Day 7)
+		if (cq_context->Completed_user_requests.size() > 0) {
+			User_Request* request = cq_context->Completed_user_requests.front();
+			cq_context->Completed_user_requests.pop_front();
+			inform_host_request_completed(request->Stream_id, request);
+		}
+	}
+
+	UFS_Completion_Queue_Context* Input_Stream_Manager_UFS::find_completion_queue(uint16_t cq_id)
+	{
+		for (auto &cq : completion_queues) {
+			if (cq->CQ_id == cq_id) {
+				return cq;
+			}
+		}
+		PRINT_ERROR("UFS host interface: reference to an unknown completion queue!")
+	}
+
+	stream_id_type Input_Stream_Manager_UFS::arbitrate_next_submission_queue()
+	{
+		//ufs-design.md section 4. Scanning starts one past the RR pointer so
+		//consecutive decisions rotate. In strict-priority mode the scan keeps the
+		//first-found queue of the lowest SQPL value (strictly-less comparison), which
+		//realizes round-robin among queues of equal priority.
+		uint16_t stream_count = (uint16_t)input_streams.size();
+		stream_id_type winner = UFS_NO_ELIGIBLE_SQ;
+		uint8_t winner_sqpl = 0xFF;
+		for (uint16_t i = 1; i <= stream_count; i++) {
+			stream_id_type candidate = (stream_id_type)((rr_arbitration_pointer + i) % stream_count);
+			Input_Stream_UFS* stream = (Input_Stream_UFS*)input_streams[candidate];
+			if (stream->Submission_head == stream->Submission_tail) {
+				continue;//nothing new to fetch (head == tail means empty, ufs-design.md section 1)
+			}
+			if (stream->On_the_fly_requests >= Queue_fetch_size) {
+				continue;//per-queue fetch window exhausted
+			}
+			if (arbitration == UFS_Arbitration_Type::ROUND_ROBIN) {
+				return candidate;
+			}
+			if (stream->SQPL < winner_sqpl) {
+				winner = candidate;
+				winner_sqpl = stream->SQPL;
+			}
+		}
+		return winner;
+	}
+
+	void Input_Stream_Manager_UFS::fetch_pending_requests()
+	{
+		//MCQConfig.MAC: device-wide cap on outstanding commands, counted from fetch
+		//issue to completion (decremented in Handle_serviced_request, Phase B Day 7)
+		while (total_active_commands < max_active_commands) {
+			stream_id_type stream_id = arbitrate_next_submission_queue();
+			if (stream_id == UFS_NO_ELIGIBLE_SQ) {
+				return;
+			}
+			Input_Stream_UFS* stream = (Input_Stream_UFS*)input_streams[stream_id];
+			//the fetch reads the UTRD at the current head, so issue before advancing
+			((Host_Interface_UFS*)host_interface)->request_fetch_unit->Fetch_next_request(stream_id);
+			stream->On_the_fly_requests++;
+			total_active_commands++;
+			stream->Submission_head++;
+			if (stream->Submission_head == stream->Submission_queue_size) {
+				stream->Submission_head = 0;//circular ring
+			}
+			rr_arbitration_pointer = stream_id;
+		}
 	}
 
 	void Input_Stream_Manager_UFS::Handle_new_arrived_request(User_Request* request)
@@ -128,11 +203,6 @@ namespace SSD_Components
 		PRINT_ERROR("Input_Stream_Manager_UFS::inform_host_request_completed is not implemented yet (Phase B Day 7)")
 	}
 
-	stream_id_type Input_Stream_Manager_UFS::arbitrate_next_submission_queue()
-	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::arbitrate_next_submission_queue is not implemented yet (Phase B Day 5)")
-	}
-
 	Request_Fetch_Unit_UFS::Request_Fetch_Unit_UFS(Host_Interface_Base* host_interface) :
 		Request_Fetch_Unit_Base(host_interface)
 	{
@@ -147,7 +217,18 @@ namespace SSD_Components
 
 	void Request_Fetch_Unit_UFS::Fetch_next_request(stream_id_type stream_id)
 	{
-		PRINT_ERROR("Request_Fetch_Unit_UFS::Fetch_next_request is not implemented yet (Phase B Day 6)")
+		//DMA step 1 of the two-step fetch (ufs-design.md section 3): read the 32-byte
+		//UTRD at the SQ head. Step 2 (the UCD read) is issued when this one arrives
+		//in Process_pcie_read_message (Phase B Day 6).
+		UFS_DMA_Req_Item* dma_req_item = new UFS_DMA_Req_Item;
+		dma_req_item->Type = UFS_DMA_Req_Type::UTRD;
+		dma_req_item->object = (void*)(intptr_t)stream_id;
+		ufs_dma_list.push_back(dma_req_item);
+
+		Host_Interface_UFS* hi = (Host_Interface_UFS*)host_interface;
+		Input_Stream_UFS* im = (Input_Stream_UFS*)hi->input_stream_manager->input_streams[stream_id];
+		host_interface->Send_read_message_to_host(im->Submission_queue_base_address + im->Submission_head * sizeof(UTP_Transfer_Request_Descriptor),
+			sizeof(UTP_Transfer_Request_Descriptor));
 	}
 
 	void Request_Fetch_Unit_UFS::Fetch_write_data(User_Request* request)
@@ -167,7 +248,25 @@ namespace SSD_Components
 
 	void Request_Fetch_Unit_UFS::Process_pcie_write_message(uint64_t address, void* payload, unsigned int payload_size)
 	{
-		PRINT_ERROR("Request_Fetch_Unit_UFS::Process_pcie_write_message is not implemented yet (Phase B Day 5)")
+		//Doorbell decode on the flat UFS register block (ufs-design.md section 1.1):
+		//queue id from the 0x10 stride, SQ tail at +0x0, CQ head at +0x8
+		Host_Interface_UFS* hi = (Host_Interface_UFS*)host_interface;
+		uint64_t val = (uint64_t)payload;
+		if (address < UFS_DOORBELL_BLOCK_BASE || address >= UFS_DOORBELL_BLOCK_BASE + 32 * UFS_DOORBELL_QUEUE_STRIDE) {
+			throw std::invalid_argument("Unknown register is written!");
+		}
+		uint64_t offset = address - UFS_DOORBELL_BLOCK_BASE;
+		uint16_t queue_id = (uint16_t)(offset / UFS_DOORBELL_QUEUE_STRIDE);
+		switch (offset % UFS_DOORBELL_QUEUE_STRIDE) {
+			case 0x0:
+				((Input_Stream_Manager_UFS*)(hi->input_stream_manager))->SQ_tail_pointer_update(queue_id, (uint16_t)val);
+				break;
+			case 0x8:
+				((Input_Stream_Manager_UFS*)(hi->input_stream_manager))->CQ_head_pointer_update(queue_id, (uint16_t)val);
+				break;
+			default:
+				throw std::invalid_argument("Unknown UFS doorbell register offset is written!");
+		}
 	}
 
 	void Request_Fetch_Unit_UFS::Process_pcie_read_message(uint64_t address, void* payload, unsigned int payload_size)
