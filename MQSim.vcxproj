@@ -33,6 +33,7 @@
     <ClCompile Include="src\host\PCIe_Root_Complex.cpp" />
     <ClCompile Include="src\host\PCIe_Switch.cpp" />
     <ClCompile Include="src\host\SATA_HBA.cpp" />
+    <ClCompile Include="src\host\UFS_HBA.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\nvm_chip\flash_memory\Block.cpp" />
     <ClCompile Include="src\nvm_chip\flash_memory\Die.cpp" />
@@ -57,6 +58,7 @@
     <ClCompile Include="src\ssd\Host_Interface_Base.cpp" />
     <ClCompile Include="src\ssd\Host_Interface_NVMe.cpp" />
     <ClCompile Include="src\ssd\Host_Interface_SATA.cpp" />
+    <ClCompile Include="src\ssd\Host_Interface_UFS.cpp" />
     <ClCompile Include="src\ssd\NVM_Firmware.cpp" />
     <ClCompile Include="src\ssd\NVM_PHY_Base.cpp" />
     <ClCompile Include="src\ssd\NVM_PHY_ONFI.cpp" />
@@ -101,6 +103,7 @@
     <ClInclude Include="src\host\PCIe_Root_Complex.h" />
     <ClInclude Include="src\host\PCIe_Switch.h" />
     <ClInclude Include="src\host\SATA_HBA.h" />
+    <ClInclude Include="src\host\UFS_HBA.h" />
     <ClInclude Include="src\nvm_chip\flash_memory\Block.h" />
     <ClInclude Include="src\nvm_chip\flash_memory\Die.h" />
     <ClInclude Include="src\nvm_chip\flash_memory\FlashTypes.h" />
@@ -137,6 +140,7 @@
     <ClInclude Include="src\ssd\Host_Interface_NVMe.h" />
     <ClInclude Include="src\ssd\Host_Interface_NVMe_Priorities.h" />
     <ClInclude Include="src\ssd\Host_Interface_SATA.h" />
+    <ClInclude Include="src\ssd\Host_Interface_UFS.h" />
     <ClInclude Include="src\ssd\NVM_Channel_Base.h" />
     <ClInclude Include="src\ssd\NVM_Firmware.h" />
     <ClInclude Include="src\ssd\NVM_PHY_Base.h" />

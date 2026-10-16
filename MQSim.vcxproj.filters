@@ -157,6 +157,9 @@
     <ClCompile Include="src\ssd\Host_Interface_SATA.cpp">
       <Filter>ssd</Filter>
     </ClCompile>
+    <ClCompile Include="src\ssd\Host_Interface_UFS.cpp">
+      <Filter>ssd</Filter>
+    </ClCompile>
     <ClCompile Include="src\ssd\NVM_Firmware.cpp">
       <Filter>ssd</Filter>
     </ClCompile>
@@ -209,6 +212,9 @@
       <Filter>ssd</Filter>
     </ClCompile>
     <ClCompile Include="src\host\SATA_HBA.cpp">
+      <Filter>host</Filter>
+    </ClCompile>
+    <ClCompile Include="src\host\UFS_HBA.cpp">
       <Filter>host</Filter>
     </ClCompile>
   </ItemGroup>
@@ -408,6 +414,9 @@
     <ClInclude Include="src\ssd\Host_Interface_SATA.h">
       <Filter>ssd</Filter>
     </ClInclude>
+    <ClInclude Include="src\ssd\Host_Interface_UFS.h">
+      <Filter>ssd</Filter>
+    </ClInclude>
     <ClInclude Include="src\ssd\NVM_Channel_Base.h">
       <Filter>ssd</Filter>
     </ClInclude>
@@ -469,6 +478,9 @@
       <Filter>ssd</Filter>
     </ClInclude>
     <ClInclude Include="src\host\SATA_HBA.h">
+      <Filter>host</Filter>
+    </ClInclude>
+    <ClInclude Include="src\host\UFS_HBA.h">
       <Filter>host</Filter>
     </ClInclude>
     <ClInclude Include="src\ssd\Host_Interface_NVMe_Priorities.h">
