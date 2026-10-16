@@ -95,6 +95,7 @@ public:
 	void Handle_arrived_write_data(User_Request* request);
 	void Handle_serviced_request(User_Request* request);
 	uint16_t Get_submission_queue_depth(stream_id_type stream_id);
+	uint16_t Get_completion_queue_context_count();//distinct CQ contexts created so far (N:1 sharing collapses several SQs onto one)
 	IO_Flow_Priority_Class::Priority Get_priority_class(stream_id_type stream_id);
 
 private:
@@ -162,6 +163,7 @@ public:
 	void Execute_simulator_event(MQSimEngine::Sim_Event*);
 	uint16_t Get_queue_depth();
 	uint16_t Get_completion_queue_count();
+	uint16_t Get_completion_queue_context_count();//actually-created distinct CQ contexts (should equal Get_completion_queue_count once all streams exist)
 	void Report_results_in_XML(std::string name_prefix, Utils::XmlWriter& xmlwriter);
 
 private:
