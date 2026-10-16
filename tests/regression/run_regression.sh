@@ -32,25 +32,25 @@ fi
 echo "PASS: scenario 1 output matches the golden reference."
 rm -f workload_scenario_*.xml
 
-echo "Running the UFS placeholder check..."
+echo "Running the UFS workload (scenario 1 of workload.xml, UFS config)..."
 set +e
-"$REPO_ROOT/MQSim" -i "$SCRIPT_DIR/ssdconfig-ufs-placeholder.xml" -w workload.xml < /dev/null > "$RUN_LOG" 2>&1
+"$REPO_ROOT/MQSim" -i "$SCRIPT_DIR/ssdconfig-ufs.xml" -w workload.xml < /dev/null > "$RUN_LOG" 2>&1
 UFS_EXIT=$?
 set -e
 
-if [ "$UFS_EXIT" -eq 0 ]; then
-    echo "FAIL: a UFS config completed instead of exiting where SSD_Device would"
-    echo "otherwise construct Host_Interface_UFS."
-    echo "This check needs updating once UFS host-interface support is actually implemented."
-    exit 1
-fi
-if ! grep -q "UFS host interface construction is not implemented yet" "$RUN_LOG"; then
-    echo "FAIL: the UFS config failed, but not with the expected placeholder message."
+if [ "$UFS_EXIT" -ne 0 ]; then
+    echo "FAIL: MQSim exited with status $UFS_EXIT while running the UFS workload."
     cat "$RUN_LOG"
     exit 1
 fi
-echo "PASS: UFS config exits with an explicit error where SSD_Device would"
-echo "otherwise construct Host_Interface_UFS, as expected while UFS support is still a work in progress."
+
+if ! diff -q workload_scenario_1.xml "$SCRIPT_DIR/golden/workload_scenario_1_ufs.xml" > /dev/null 2>&1; then
+    echo "FAIL: UFS scenario 1 output no longer matches the golden reference."
+    echo "Compare with: diff workload_scenario_1.xml $SCRIPT_DIR/golden/workload_scenario_1_ufs.xml"
+    cat "$RUN_LOG"
+    exit 1
+fi
+echo "PASS: UFS scenario 1 output matches the golden reference."
 rm -f workload_scenario_*.xml
 
 echo "All regression checks passed."

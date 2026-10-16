@@ -8,18 +8,18 @@ This folder holds the regression checks for UFSSimulator, the UFS-enabled fork o
 ./tests/regression/run_regression.sh
 ```
 
-The script builds MQSim, runs the pre-existing NVMe workload, and checks two things.
+The script builds MQSim, then checks two things.
 
-1. Scenario 1's result XML matches the golden reference committed under
-   `tests/regression/golden/`. A mismatch means the NVMe or SATA data path
-   changed behavior. That needs an explanation before the golden file gets
-   updated to match.
-2. A UFS-configured run still exits with an explicit error where `SSD_Device`
-   would otherwise construct `Host_Interface_UFS`, with the exact message the
-   placeholder code prints. This check exists because UFS support is still
-   being built. It needs to change once `Host_Interface_UFS` and `UFS_HBA`
-   actually process requests, at which point the check should assert success
-   instead of an explicit failure.
+1. The NVMe workload's scenario 1 result XML matches the golden reference
+   committed under `tests/regression/golden/workload_scenario_1.xml`. A
+   mismatch means the NVMe or SATA data path changed behavior. That needs an
+   explanation before the golden file gets updated to match.
+2. The UFS workload's scenario 1 result XML matches the golden reference at
+   `tests/regression/golden/workload_scenario_1_ufs.xml`, using the config at
+   `tests/regression/ssdconfig-ufs.xml`. A mismatch means UFS behavior
+   changed. As more of UFS gets implemented, this golden file is expected to
+   be updated deliberately (not just regenerated to make the check pass) each
+   time UFS behavior changes for a real reason.
 
 ## A build pitfall that produces wrong results instead of a build error
 

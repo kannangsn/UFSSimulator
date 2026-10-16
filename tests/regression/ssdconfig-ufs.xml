@@ -12,7 +12,7 @@
 		<Enabled_Preconditioning>false</Enabled_Preconditioning>
 		<Memory_Type>FLASH</Memory_Type>
 		<HostInterface_Type>UFS</HostInterface_Type>
-		<IO_Queue_Depth>65535</IO_Queue_Depth>
+		<IO_Queue_Depth>8192</IO_Queue_Depth>
 		<Queue_Fetch_Size>512</Queue_Fetch_Size>
 		<Caching_Mechanism>ADVANCED</Caching_Mechanism>
 		<Data_Cache_Sharing_Mode>SHARED</Data_Cache_Sharing_Mode>
