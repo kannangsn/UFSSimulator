@@ -33,7 +33,7 @@ active per simulation.
 - **[ABSTRACTION]** Doorbell values are slot indices, not the spec's DWord offsets, and registers
   sit at fixed simulator-chosen addresses rather than behind `SQDAOy`/`CQDAOy` indirection. Both
   spec mechanisms are hardware-discoverability features. A doorbell write is one small MMIO write
-  either way, so timing is unaffected (`plan.md` §7 Day 1).
+  either way, so timing is unaffected.
 
 ### 1.2 Host-memory regions (read/written via `PCIe_Root_Complex::Read_from_memory` / `Write_to_memory`)
 
@@ -125,8 +125,9 @@ Completion (device → HBA → flow):
 
 7. Device writes **Response UPIU, 32 B**, to the UCD response region.
 8. Device writes the **CQ entry, 32 B**, into CQ ring `CQID(q)`. OCS is here (§2.2).
-   Steps 7+8 are issued together (one aggregate 64 B `Write_to_memory` delivery is acceptable
-   if per-message event cost matters, decide at implementation, timing identical either way).
+   Steps 7+8 are issued as two separate `Write_to_memory` deliveries (`Send_completion_entry`
+   in `Request_Fetch_Unit_UFS`), not one aggregate 64 B message. Both transfers' link occupancy
+   is modeled, but only the CQ entry is behaviorally consumed by the host.
 9. Interrupt aggregation gate (§6): the HBA consumes the CQ entry when the IACTH/IATOVAL
    condition fires (or immediately when aggregation is disabled).
 10. HBA maps `SQID`+Task Tag → original request, frees tag + slot, advances CQ head, writes
@@ -147,7 +148,7 @@ Global scheme selector mirroring `MCQConfig.AS` (`plan.md` §2.4), config knob `
   UNDEFINED→7). The 8-level SQPL space is exposed in the struct but only 4 levels plus 7 are
   producible from MQSim workloads. Documented, not hidden.
 - Backend pairing: UFS configs use the non-priority `TSU_OutofOrder`. Arbitration stays at the
-  host interface (`plan.md` §7 Day 5). No mapping onto NVMe's weighted classes.
+  host interface. No mapping onto NVMe's weighted classes.
 - Fetch pacing: per-SQ in-flight window reuses `Queue_Fetch_Size` semantics from NVMe, and the
   device-wide `MAC` cap (§5) is enforced on top.
 
@@ -179,7 +180,7 @@ overhead **[ASSUMPTION]** `header 8 B / max payload 256 B` approximating UniPro 
 place of PCIe's TLP 20 B / DLLP 6 B / 128 B (`plan.md` §6 "Link timing"). Worked default:
 HS-G5 Rate-B = 23347.2 Mbps × 0.80 / 8000 ≈ **2.33 GB/s/lane**. Gear 6 doubles it.
 
-## 6. Interrupt aggregation (`plan.md` §7 Day 7, built fresh, no precedent implemented in this codebase)
+## 6. Interrupt aggregation (built fresh, no precedent implemented in this codebase)
 
 One aggregation context per CQ (**[ABSTRACTION]**: IAG groups collapse to per-CQ contexts, since
 grouping CQs is only meaningful for interrupt-line sharing, which MQSim doesn't model). Device
@@ -214,5 +215,4 @@ serialized per RPMB region). Documented as a known simplification.
 2. `IO_Queue_Depth` ∈ [2, 8192]. Usable slots = depth − 1 (reserved-slot ring convention).
 3. `UFS_Max_Active_Commands` ≥ 1. Outstanding-per-SQ ≤ min(depth−1, 256 tags, `Queue_Fetch_Size`).
 4. Existing NVMe/SATA configs must be untouched by construction. No shared constant in
-   `Host_Defs.h`/`Host_Interface_Defs.h` is modified, only added to (regression gate, `plan.md`
-   §7 Day 3).
+   `Host_Defs.h`/`Host_Interface_Defs.h` is modified, only added to (regression gate).
