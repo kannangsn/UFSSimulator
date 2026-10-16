@@ -29,8 +29,20 @@ namespace Host_Components
 					sata_hba->SATA_consume_io_request((Completion_Queue_Entry*)payload);
 					break;
 				case HostInterface_Types::UFS:
-					//routes UFS_Completion_Queue_Entry to the UFS_HBA. Implemented in Phase B Day 7.
-					PRINT_ERROR("UFS completion consumption is not implemented yet (plan.md section 7, Phase B Day 7)")
+					//Two device-write kinds (ufs-design.md section 3 steps 7-8), told
+					//apart by the region bits of the address
+					switch (UFS_MEMORY_REGION_KIND(address)) {
+						case 0xF://CQ ring: the completion entry, consumed by the HBA
+							ufs_hba->UFS_consume_io_request((UFS_Completion_Queue_Entry*)payload);
+							break;
+						case 0x1://UCD response region: the Response UPIU write. Its link
+								//occupancy was modeled by the message itself. The content
+								//is not consumed by the host model.
+							delete (UFS_Response_UPIU*)payload;
+							break;
+						default:
+							PRINT_ERROR("UFS: device write to an unknown host memory region!")
+					}
 					break;
 				default:
 					PRINT_ERROR("Uknown Host Interface type in PCIe_Root_Complex")

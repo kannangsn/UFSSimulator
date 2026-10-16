@@ -93,12 +93,12 @@ namespace SSD_Components
 		UFS_Completion_Queue_Context* cq_context = find_completion_queue(cq_id);
 		cq_context->Completion_head = head_pointer_value;
 
-		//The host freed CQ slots. Deliver a completion that was blocked on a full
-		//ring, if any (filled by Handle_serviced_request, Phase B Day 7)
+		//The host freed CQ slots. Deliver a completion that was blocked on a full ring
 		if (cq_context->Completed_user_requests.size() > 0) {
 			User_Request* request = cq_context->Completed_user_requests.front();
 			cq_context->Completed_user_requests.pop_front();
 			inform_host_request_completed(request->Stream_id, request);
+			DELETE_REQUEST_UFS(request);
 		}
 	}
 
@@ -190,7 +190,77 @@ namespace SSD_Components
 
 	void Input_Stream_Manager_UFS::Handle_serviced_request(User_Request* request)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::Handle_serviced_request is not implemented yet (Phase B Day 7)")
+		stream_id_type stream_id = request->Stream_id;
+		Input_Stream_UFS* stream = (Input_Stream_UFS*)input_streams[stream_id];
+		stream->Waiting_user_requests.remove(request);
+		stream->On_the_fly_requests--;
+		total_active_commands--;//MCQConfig.MAC accounting (incremented at fetch issue)
+
+		DEBUG("** UFS Host Interface: Request #" << request->ID << " from stream #" << request->Stream_id << " is finished")
+
+		//Read data goes back to the host as DATA IN UPIU(s) before the completion
+		if (request->Type == UserRequestType::READ) {
+			((Host_Interface_UFS*)host_interface)->request_fetch_unit->Send_read_data(request);
+		}
+
+		//Freed MAC capacity: run the arbitration pump again (the UFS analogue of
+		//NVMe's per-queue refetch-on-completion)
+		fetch_pending_requests();
+
+		UFS_Completion_Queue_Context* cq_context = find_completion_queue(stream->CQ_id);
+		if (iacth == 0 && iatoval == 0) {
+			//aggregation disabled: immediate delivery (the NVMe-equivalent baseline)
+			deliver_or_block(cq_context, request);
+			return;
+		}
+
+		//Interrupt aggregation (ufs-design.md section 6): hold the completion, flush
+		//when the count threshold is reached, or when the IATOVAL timer fires
+		if (cq_context->Pending_completions.empty()) {
+			cq_context->Oldest_pending_completion_time = Simulator->Time();
+			if (iatoval > 0) {
+				Simulator->Register_sim_event(Simulator->Time() + iatoval, (Host_Interface_UFS*)host_interface,
+					(void*)(intptr_t)cq_context->CQ_id, 0);
+			}
+		}
+		cq_context->Pending_completions.push_back(request);
+		if (iacth > 0 && cq_context->Pending_completions.size() >= iacth) {
+			flush_pending_completions(cq_context);
+		}
+	}
+
+	void Input_Stream_Manager_UFS::Aggregation_timeout(uint16_t cq_id)
+	{
+		UFS_Completion_Queue_Context* cq_context = find_completion_queue(cq_id);
+		//Stale-timer guard: a count-based flush may have emptied the list, and a
+		//timer armed by an older arrival must not flush a younger batch early
+		if (cq_context->Pending_completions.empty()) {
+			return;
+		}
+		if (Simulator->Time() >= cq_context->Oldest_pending_completion_time + iatoval) {
+			flush_pending_completions(cq_context);
+		}
+	}
+
+	void Input_Stream_Manager_UFS::flush_pending_completions(UFS_Completion_Queue_Context* cq_context)
+	{
+		while (!cq_context->Pending_completions.empty()) {
+			User_Request* request = cq_context->Pending_completions.front();
+			cq_context->Pending_completions.pop_front();
+			deliver_or_block(cq_context, request);
+		}
+	}
+
+	void Input_Stream_Manager_UFS::deliver_or_block(UFS_Completion_Queue_Context* cq_context, User_Request* request)
+	{
+		//One ring slot is always reserved (head == tail means empty, ufs-design.md
+		//section 1): the CQ is full when advancing the tail would reach the head
+		if ((uint16_t)((cq_context->Completion_tail + 1) % cq_context->Completion_queue_size) == cq_context->Completion_head) {
+			cq_context->Completed_user_requests.push_back(request);//delivered when the host frees CQ slots
+			return;
+		}
+		inform_host_request_completed(request->Stream_id, request);
+		DELETE_REQUEST_UFS(request);
 	}
 
 	uint16_t Input_Stream_Manager_UFS::Get_submission_queue_depth(stream_id_type stream_id)
@@ -253,7 +323,13 @@ namespace SSD_Components
 
 	void Input_Stream_Manager_UFS::inform_host_request_completed(stream_id_type stream_id, User_Request* request)
 	{
-		PRINT_ERROR("Input_Stream_Manager_UFS::inform_host_request_completed is not implemented yet (Phase B Day 7)")
+		Input_Stream_UFS* stream = (Input_Stream_UFS*)input_streams[stream_id];
+		UFS_Completion_Queue_Context* cq_context = find_completion_queue(stream->CQ_id);
+		((Request_Fetch_Unit_UFS*)((Host_Interface_UFS*)host_interface)->request_fetch_unit)->Send_completion_entry(request);
+		cq_context->Completion_tail++;//next free slot in the completion queue
+		if (cq_context->Completion_tail == cq_context->Completion_queue_size) {
+			cq_context->Completion_tail = 0;//circular ring
+		}
 	}
 
 	Request_Fetch_Unit_UFS::Request_Fetch_Unit_UFS(Host_Interface_Base* host_interface) :
@@ -318,7 +394,37 @@ namespace SSD_Components
 
 	void Request_Fetch_Unit_UFS::Send_completion_entry(User_Request* request)
 	{
-		PRINT_ERROR("Request_Fetch_Unit_UFS::Send_completion_entry is not implemented yet (Phase B Day 7)")
+		//Completion write-back, ufs-design.md section 3 steps 7-8: the Response UPIU
+		//(32 B) goes to the UCD response region, then the CQ entry (32 B) to the CQ
+		//ring. Two link messages, so both transfers' occupancy is modeled. Only the
+		//CQ entry is behaviorally consumed by the host.
+		Host_Interface_UFS* hi = (Host_Interface_UFS*)host_interface;
+		Input_Stream_UFS* stream = (Input_Stream_UFS*)hi->input_stream_manager->input_streams[request->Stream_id];
+		UFS_Completion_Queue_Context* cq_context = ((Input_Stream_Manager_UFS*)hi->input_stream_manager)->find_completion_queue(stream->CQ_id);
+		UFS_Command_UPIU* command_upiu = (UFS_Command_UPIU*)request->IO_command_info;
+
+		UFS_Response_UPIU* response_upiu = new UFS_Response_UPIU;
+		memset(response_upiu, 0, sizeof(UFS_Response_UPIU));
+		response_upiu->Transaction_Type = 0x21;//RESPONSE UPIU
+		response_upiu->LUN = command_upiu->LUN;
+		response_upiu->Task_Tag = command_upiu->Task_Tag;
+		response_upiu->Response = 0;//Target Success
+		response_upiu->Status = 0; //SCSI GOOD
+		//Response region address: slot chosen by task tag [ABSTRACTION: the actual
+		//slot index has no timing content. Only the region kind and 32 B size matter]
+		uint64_t response_address = UFS_UCD_MEMORY(stream->SQ_id, command_upiu->Task_Tag % stream->Submission_queue_size) + 0x40;
+		host_interface->Send_write_message_to_host(response_address, response_upiu, sizeof(UFS_Response_UPIU));
+
+		UFS_Completion_Queue_Entry* cqe = new UFS_Completion_Queue_Entry;
+		memset(cqe, 0, sizeof(UFS_Completion_Queue_Entry));
+		cqe->DW0 = (uint32_t)(stream->SQ_id & 0x1F);//SQID. UCDLBA carried as zero. The HBA identifies the command by SQID + Task Tag
+		cqe->DW2 = (16 << 16) | 8;//Response UPIU offset/length (DWords), copied from the UTRD convention
+		cqe->DW3 = (24 << 16) | 1;//PRDT offset/length
+		cqe->DW4 = 0;//OCS = SUCCESS. In MCQ mode the OCS is here, not in UTRD.DW2
+		cqe->DW5 = ((uint32_t)command_upiu->LUN << 8) | command_upiu->Task_Tag;
+		host_interface->Send_write_message_to_host(
+			cq_context->Completion_queue_base_address + (uint64_t)cq_context->Completion_tail * sizeof(UFS_Completion_Queue_Entry),
+			cqe, sizeof(UFS_Completion_Queue_Entry));
 	}
 
 	void Request_Fetch_Unit_UFS::Process_pcie_write_message(uint64_t address, void* payload, unsigned int payload_size)
@@ -467,6 +573,9 @@ namespace SSD_Components
 
 	void Host_Interface_UFS::Execute_simulator_event(MQSimEngine::Sim_Event* event)
 	{
+		//The only device-side events are per-CQ IATOVAL aggregation timers,
+		//registered in Handle_serviced_request with the CQ id as the parameter
+		((Input_Stream_Manager_UFS*)input_stream_manager)->Aggregation_timeout((uint16_t)(intptr_t)event->Parameters);
 	}
 
 	uint16_t Host_Interface_UFS::Get_queue_depth()

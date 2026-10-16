@@ -141,9 +141,56 @@ namespace Host_Components
 				break;
 			}
 			case UFS_HBA_Sim_Events::CONSUME_IO_REQUEST:
-				//completion consumption lands in Phase B Day 7
-				PRINT_ERROR("UFS_HBA: completion consumption is not implemented yet (plan.md section 7, Phase B Day 7)")
+			{
+				UFS_Completion_Queue_Entry* cqe = consume_requests.front();
+				consume_requests.pop();
+
+				//The CQ entry identifies its command by SQID (DW0 bits 4:0) and Task
+				//Tag (DW5 bits 7:0). See ufs-design.md section 3 step 10.
+				uint16_t sq_id = (uint16_t)(cqe->DW0 & 0x1F);
+				uint8_t task_tag = (uint8_t)(cqe->DW5 & 0xFF);
+				if (sq_id >= sq_count) {
+					PRINT_ERROR("UFS_HBA: completion received for an unknown submission queue!")
+				}
+				UFS_SQ_Ring* ring = sq_rings[sq_id];
+				if (ring->queue.count(task_tag) == 0 || ring->queue[task_tag] == NULL) {
+					PRINT_ERROR("UFS_HBA: completion received for an unknown task tag!")
+				}
+				Host_IO_Request* request = ring->queue[task_tag];
+				ring->queue.erase(task_tag);
+				ring->available_task_tags.insert(task_tag);
+				//SQ slots are recycled at completion [ABSTRACTION: on real hardware
+				//the host learns fetch progress by reading SQHPy. A register-poll
+				//model would add no timing content]
+				ring->Submission_queue_head++;
+				if (ring->Submission_queue_head == ring->Submission_queue_size) {
+					ring->Submission_queue_head = 0;
+				}
+
+				Update_and_submit_cq_head(ring->CQ_id);
+
+				//Freed slot/tag: enqueue requests that were waiting on a full ring
+				while (ring->waiting_requests_for_submission.size() > 0) {
+					Host_IO_Request* new_request = ring->waiting_requests_for_submission.front();
+					if (!enqueue_into_sq(ring, new_request)) {
+						break;
+					}
+					ring->waiting_requests_for_submission.pop_front();
+				}
+
+				//Completion bookkeeping (stats + next-request generation) is in the
+				//flow. It also deletes the host-side request
+				if (IO_flows != NULL) {
+					(*IO_flows)[request->Source_flow_id]->UFS_consume_io_request(request);
+				}
+
+				delete cqe;
+
+				if (consume_requests.size() > 0) {
+					Simulator->Register_sim_event(Simulator->Time() + hba_processing_delay, this, NULL, static_cast<int>(UFS_HBA_Sim_Events::CONSUME_IO_REQUEST));
+				}
 				break;
+			}
 		}
 	}
 
@@ -157,7 +204,10 @@ namespace Host_Components
 
 	void UFS_HBA::UFS_consume_io_request(UFS_Completion_Queue_Entry* cqe)
 	{
-		PRINT_ERROR("UFS_HBA::UFS_consume_io_request is not implemented yet (Phase B Day 7)")
+		consume_requests.push(cqe);
+		if (consume_requests.size() == 1) {
+			Simulator->Register_sim_event(Simulator->Time() + hba_processing_delay, this, NULL, static_cast<int>(UFS_HBA_Sim_Events::CONSUME_IO_REQUEST));
+		}
 	}
 
 	UTP_Transfer_Request_Descriptor* UFS_HBA::Read_utrd(uint64_t address)
@@ -233,7 +283,12 @@ namespace Host_Components
 
 	void UFS_HBA::Update_and_submit_cq_head(uint16_t cq_id)
 	{
-		PRINT_ERROR("UFS_HBA::Update_and_submit_cq_head is not implemented yet (Phase B Day 7)")
+		UFS_CQ_Ring* cq = cq_rings[cq_id];
+		cq->Completion_queue_head++;
+		if (cq->Completion_queue_head == cq->Completion_queue_size) {
+			cq->Completion_queue_head = 0;//circular ring
+		}
+		pcie_root_complex->Write_to_device(cq->Completion_head_register_address_on_device, cq->Completion_queue_head);
 	}
 
 	void UFS_HBA::Set_io_flows(std::vector<Host_Components::IO_Flow_Base*>* IO_flows)

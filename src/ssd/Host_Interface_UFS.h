@@ -83,6 +83,7 @@ public:
 
 class Input_Stream_Manager_UFS : public Input_Stream_Manager_Base
 {
+	friend class Request_Fetch_Unit_UFS;//Send_completion_entry resolves the CQ context
 public:
 	Input_Stream_Manager_UFS(Host_Interface_Base* host_interface, uint16_t queue_fetch_size,
 							 UFS_Arbitration_Type arbitration, uint16_t max_active_commands,
@@ -97,6 +98,9 @@ public:
 	void Handle_new_arrived_request(User_Request* request);
 	void Handle_arrived_write_data(User_Request* request);
 	void Handle_serviced_request(User_Request* request);
+	//Fired by Host_Interface_UFS::Execute_simulator_event when a per-CQ IATOVAL
+	//aggregation timer expires (ufs-design.md section 6)
+	void Aggregation_timeout(uint16_t cq_id);
 	uint16_t Get_submission_queue_depth(stream_id_type stream_id);
 	uint16_t Get_completion_queue_context_count();//distinct CQ contexts created so far (N:1 sharing collapses several SQs onto one)
 	IO_Flow_Priority_Class::Priority Get_priority_class(stream_id_type stream_id);
@@ -111,6 +115,11 @@ private:
 	//the device-wide MAC cap and the per-queue fetch window allow
 	void fetch_pending_requests();
 	UFS_Completion_Queue_Context* find_completion_queue(uint16_t cq_id);
+	//Deliver a completion to the host (Response UPIU + CQ entry) or park it on the
+	//blocked list when the CQ ring is full. Frees the device-side request on deliver
+	void deliver_or_block(UFS_Completion_Queue_Context* cq_context, User_Request* request);
+	//Flush the aggregation-held completions of one CQ (ufs-design.md section 6)
+	void flush_pending_completions(UFS_Completion_Queue_Context* cq_context);
 
 	uint16_t Queue_fetch_size;
 	UFS_Arbitration_Type arbitration;
