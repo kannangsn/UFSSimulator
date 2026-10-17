@@ -21,6 +21,21 @@ The script builds MQSim, then checks two things.
    be updated deliberately (not just regenerated to make the check pass) each
    time UFS behavior changes for a real reason.
 
+## Checking the EXTERNAL GC policy hook
+
+```
+./tests/external_gc_policy/run_test.sh
+```
+
+`GC_Block_Selection_Policy=EXTERNAL` hands each GC block-selection decision to
+an outside controller over a pair of named pipes instead of resolving it from
+one fixed policy. This script builds MQSim, then plays that controller
+itself: it drives the pipes directly, switching the selected action on every
+single decision, and stops with an explicit error (printing the captured
+log) if any run exits non-zero. Switching the action every decision is deliberate. It is
+what makes the race described in plan.md section 8 item 9 likely enough to
+hit, and is how that race was originally found.
+
 ## A build pitfall that produces wrong results instead of a build error
 
 A build that stops partway, for example a failed link step or an
