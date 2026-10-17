@@ -266,13 +266,27 @@ namespace SSD_Components
 	{
 		//A GC burst on a small device can pop this queue faster than new
 		//block allocations refill it. See Select_Block_RANDOM for the
-		//block_no_per_plane "none found" sentinel.
-		if (pbke->Block_usage_history.empty()) {
-			return block_no_per_plane;
+		//block_no_per_plane "none found" sentinel. Unlike the other four
+		//policies, FIFO never checked is_safe_gc_wl_candidate at all, so it
+		//could return the current write frontier itself. Bounded to the
+		//queue's size at entry so a cycle of all-unsafe entries being
+		//pushed back doesn't loop forever.
+		unsigned int attempts = (unsigned int)pbke->Block_usage_history.size();
+		for (unsigned int i = 0; i < attempts; i++) {
+			if (pbke->Block_usage_history.empty()) {
+				return block_no_per_plane;
+			}
+			flash_block_ID_type candidate = pbke->Block_usage_history.front();
+			pbke->Block_usage_history.pop();
+			if (is_safe_gc_wl_candidate(pbke, candidate)) {
+				return candidate;
+			}
+			//Not safe yet, still a write frontier or its last reserved page
+			//has not been submitted. Put it back at the end rather than
+			//losing track of it, and try the next one.
+			pbke->Block_usage_history.push(candidate);
 		}
-		flash_block_ID_type gc_candidate_block_id = pbke->Block_usage_history.front();
-		pbke->Block_usage_history.pop();
-		return gc_candidate_block_id;
+		return block_no_per_plane;
 	}
 
 	void GC_and_WL_Unit_Page_Level::Ensure_external_pipes_open()

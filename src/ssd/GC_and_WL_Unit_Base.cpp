@@ -118,13 +118,14 @@ namespace SSD_Components
 						((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->RelatedRead = NULL;
 						_my_instance->address_mapping_unit->Allocate_new_page_for_gc(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite, pbke->Blocks[transaction->Address.BlockID].Holds_mapping_data);
 						_my_instance->tsu->Submit_transaction(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite);
+						_my_instance->block_manager->Mark_write_submitted(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->Address);
 						_my_instance->tsu->Schedule();
 					} else {
 						PRINT_ERROR("Inconsistency found when moving a page for GC/WL!")
 					}
 				} else {
 					_my_instance->address_mapping_unit->Get_data_mapping_info_for_gc(transaction->Stream_id, transaction->LPA, ppa, page_status_bitmap);
-					
+
 					//There has been no write on the page since GC start, and it is still valid
 					if (ppa == transaction->PPA) {
 						_my_instance->tsu->Prepare_for_transaction_submit();
@@ -133,6 +134,7 @@ namespace SSD_Components
 						((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->RelatedRead = NULL;
 						_my_instance->address_mapping_unit->Allocate_new_page_for_gc(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite, pbke->Blocks[transaction->Address.BlockID].Holds_mapping_data);
 						_my_instance->tsu->Submit_transaction(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite);
+						_my_instance->block_manager->Mark_write_submitted(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->Address);
 						_my_instance->tsu->Schedule();
 					} else {
 						PRINT_ERROR("Inconsistency found when moving a page for GC/WL!")
@@ -236,6 +238,12 @@ namespace SSD_Components
 		}
 
 		if (plane_record->Blocks[gc_wl_candidate_block_id].Has_ongoing_gc_wl) {
+			return false;
+		}
+
+		//The block's last reserved page may not have its program transaction
+		//submitted yet, see Block_Pool_Slot_Type::Pending_write_submission_count
+		if (plane_record->Blocks[gc_wl_candidate_block_id].Pending_write_submission_count > 0) {
 			return false;
 		}
 

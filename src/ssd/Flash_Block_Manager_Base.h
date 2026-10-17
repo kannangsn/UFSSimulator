@@ -43,6 +43,20 @@ namespace SSD_Components
 		bool Hot_block = false;//Used for hot/cold separation mentioned in the "On the necessity of hot and cold data identification to reduce the write amplification in flash-based SSDs", Perf. Eval., 2014.
 		int Ongoing_user_read_count;
 		int Ongoing_user_program_count;
+		//Counts pages whose slot has been reserved (Current_page_write_index
+		//already incremented past them) but whose program transaction has
+		//not been submitted to the TSU yet. Only ever nonzero on a block
+		//that was just retired as a write frontier, for the single page
+		//that triggered the retirement: reserving that page's slot and
+		//replacing the write frontier both happen before the caller gets a
+		//chance to submit that page's own transaction, and GC block
+		//selection can run in between (Allocate_block_and_page_in_plane_for_gc_write
+		//calls Check_gc_required synchronously once a write frontier wraps).
+		//Without this, is_safe_gc_wl_candidate sees a block that is no
+		//longer the write frontier and has no ongoing program count, looks
+		//safe, and GC can select it and lock a page whose on-flash metadata
+		//was never actually written.
+		unsigned int Pending_write_submission_count = 0;
 		void Erase();
 	};
 
@@ -96,6 +110,7 @@ namespace SSD_Components
 		void Program_transaction_serviced(const NVM::FlashMemory::Physical_Page_Address& page_address);//Updates the block bookkeeping record
 		bool Is_having_ongoing_program(const NVM::FlashMemory::Physical_Page_Address& block_address);//Cheks if block has any ongoing program request
 		bool Is_page_valid(Block_Pool_Slot_Type* block, flash_page_ID_type page_id);//Make the page invalid in the block bookkeeping record
+		void Mark_write_submitted(const NVM::FlashMemory::Physical_Page_Address& page_address);//Clears the Pending_write_submission_count set when this page's slot was reserved, see Block_Pool_Slot_Type's own comment
 	protected:
 		PlaneBookKeepingType ****plane_manager;//Keeps track of plane block usage information
 		GC_and_WL_Unit_Base *gc_and_wl_unit;

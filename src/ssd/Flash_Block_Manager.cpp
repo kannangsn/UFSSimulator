@@ -43,8 +43,18 @@ namespace SSD_Components
 		plane_record->Free_pages_count--;		
 		page_address.BlockID = plane_record->GC_wf[stream_id]->BlockID;
 		page_address.PageID = plane_record->GC_wf[stream_id]->Current_page_write_index++;
+		//This page's own program transaction has not been submitted yet,
+		//that happens in the caller after this function returns. Up to
+		//max_ongoing_gc_reqs_per_plane GC operations can each reserve a
+		//page here before any of them submits, so every reservation needs
+		//this, not only the one that happens to wrap the block (GC
+		//candidate selection, triggered below on a wrap on this block or
+		//any other one in the plane, can otherwise select a block that
+		//still has one of these pages pending). See
+		//Pending_write_submission_count, cleared by Mark_write_submitted
+		//once the caller actually submits this page's transaction.
+		plane_record->Blocks[page_address.BlockID].Pending_write_submission_count++;
 
-		
 		//The current write frontier block is written to the end
 		if (plane_record->GC_wf[stream_id]->Current_page_write_index == pages_no_per_block) {
 			//Assign a new write frontier block
