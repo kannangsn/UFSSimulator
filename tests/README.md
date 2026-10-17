@@ -36,6 +36,34 @@ log) if any run exits non-zero. Switching the action every decision is deliberat
 what makes the race described in plan.md section 8 item 9 likely enough to
 hit, and is how that race was originally found.
 
+## Checking the GC write-completion race (RANDOM_PP)
+
+```
+./tests/gc_write_completion_race/run_test.sh
+```
+
+`RANDOM_PP` used to crash the GC-stress fixture deterministically, on its
+own, with no live hook or pipes involved. This script just builds MQSim and
+runs it against that fixture natively with `GC_Block_Selection_Policy=RANDOM_PP`,
+checking for a clean exit. Confirmed to catch the regression: run against
+the commit before the fix in plan.md section 8 item 11, it crashes partway
+through with the same "Inconsistency in the global mapping table when
+locking an LPA!" error RANDOM_PP always hit.
+
+## Running the UFS unit/integration tests
+
+```
+./ufs/tests/run_tests.sh
+```
+
+Links the compiled `.o` files directly (everything except `main.o`) against
+four small test binaries that call the UFS host interface's internal APIs
+in-process, instead of running the full simulator end to end:
+`test_construction` (ring construction), `test_arbitration` (arbitration and
+MAC), `test_e2e` (the two-step fetch path end to end), and `test_completion`
+(completion and interrupt aggregation). Each one gets its own process, since
+they share the engine singleton.
+
 ## A build pitfall that produces wrong results instead of a build error
 
 A build that stops partway, for example a failed link step or an

@@ -118,7 +118,6 @@ namespace SSD_Components
 						((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->RelatedRead = NULL;
 						_my_instance->address_mapping_unit->Allocate_new_page_for_gc(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite, pbke->Blocks[transaction->Address.BlockID].Holds_mapping_data);
 						_my_instance->tsu->Submit_transaction(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite);
-						_my_instance->block_manager->Mark_write_submitted(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->Address);
 						_my_instance->tsu->Schedule();
 					} else {
 						PRINT_ERROR("Inconsistency found when moving a page for GC/WL!")
@@ -134,7 +133,6 @@ namespace SSD_Components
 						((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->RelatedRead = NULL;
 						_my_instance->address_mapping_unit->Allocate_new_page_for_gc(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite, pbke->Blocks[transaction->Address.BlockID].Holds_mapping_data);
 						_my_instance->tsu->Submit_transaction(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite);
-						_my_instance->block_manager->Mark_write_submitted(((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->Address);
 						_my_instance->tsu->Schedule();
 					} else {
 						PRINT_ERROR("Inconsistency found when moving a page for GC/WL!")
@@ -151,6 +149,11 @@ namespace SSD_Components
 					DEBUG(Simulator->Time() << ": LPA=" << (MVPN_type)transaction->LPA << " unlocked!!");
 				}
 				pbke->Blocks[((NVM_Transaction_Flash_WR*)transaction)->RelatedErase->Address.BlockID].Erase_transaction->Page_movement_activities.remove((NVM_Transaction_Flash_WR*)transaction);
+				//This GC destination write has now actually finished on the
+				//flash chip (its on-flash metadata is set), not merely
+				//submitted. Only now is it safe for GC to consider this
+				//block a candidate again, see Outstanding_gc_write_count.
+				_my_instance->block_manager->Mark_gc_write_completed(transaction->Address);
 				break;
 			case Transaction_Type::ERASE:
 				pbke->Ongoing_erase_operations.erase(pbke->Ongoing_erase_operations.find(transaction->Address.BlockID));
@@ -241,9 +244,10 @@ namespace SSD_Components
 			return false;
 		}
 
-		//The block's last reserved page may not have its program transaction
-		//submitted yet, see Block_Pool_Slot_Type::Pending_write_submission_count
-		if (plane_record->Blocks[gc_wl_candidate_block_id].Pending_write_submission_count > 0) {
+		//One or more of the block's reserved GC-destination pages may not
+		//have actually finished writing yet, see
+		//Block_Pool_Slot_Type::Outstanding_gc_write_count
+		if (plane_record->Blocks[gc_wl_candidate_block_id].Outstanding_gc_write_count > 0) {
 			return false;
 		}
 

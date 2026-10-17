@@ -100,7 +100,7 @@ namespace SSD_Components
 		Stream_id = NO_STREAM;
 		Holds_mapping_data = false;
 		Erase_transaction = NULL;
-		Pending_write_submission_count = 0;
+		Outstanding_gc_write_count = 0;
 	}
 
 	Block_Pool_Slot_Type* PlaneBookKeepingType::Get_a_free_block(stream_id_type stream_id, bool for_mapping_data)
@@ -223,11 +223,11 @@ namespace SSD_Components
 		plane_record->Blocks[page_address.BlockID].Ongoing_user_read_count--;
 	}
 
-	void Flash_Block_Manager_Base::Mark_write_submitted(const NVM::FlashMemory::Physical_Page_Address& page_address)
+	void Flash_Block_Manager_Base::Mark_gc_write_completed(const NVM::FlashMemory::Physical_Page_Address& page_address)
 	{
 		PlaneBookKeepingType *plane_record = &plane_manager[page_address.ChannelID][page_address.ChipID][page_address.DieID][page_address.PlaneID];
-		if (plane_record->Blocks[page_address.BlockID].Pending_write_submission_count > 0) {
-			plane_record->Blocks[page_address.BlockID].Pending_write_submission_count--;
+		if (plane_record->Blocks[page_address.BlockID].Outstanding_gc_write_count > 0) {
+			plane_record->Blocks[page_address.BlockID].Outstanding_gc_write_count--;
 		}
 	}
 	
