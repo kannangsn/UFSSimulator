@@ -21,8 +21,14 @@ namespace SSD_Components
 		RANDOM, RANDOM_P, RANDOM_PP,/*The RANDOM, RANDOM+, and RANDOM++ algorithms described in: "B. Van Houdt, A Mean
 									Field Model  for a Class of Garbage Collection Algorithms in Flash - based Solid
 									State Drives, SIGMETRICS, 2013".*/
-		FIFO						/*The FIFO algortihm described in P. Desnoyers, "Analytic  Modeling  of  SSD Write
+		FIFO,						/*The FIFO algortihm described in P. Desnoyers, "Analytic  Modeling  of  SSD Write
 									Performance, SYSTOR, 2012".*/
+		EXTERNAL					/*Each GC decision is sent to an external controller over a pair of named
+									pipes (state out, action in) instead of being resolved by a built-in
+									heuristic. The action selects which of GREEDY, RGA, RANDOM, RANDOM_P, or
+									FIFO's own logic to run for that one decision. See
+									Device_Parameter_Set::External_GC_State_Pipe_Path/External_GC_Action_Pipe_Path
+									and GC_and_WL_Unit_Page_Level::Check_gc_required.*/
 	};
 
 	class Address_Mapping_Unit_Base;

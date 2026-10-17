@@ -46,6 +46,12 @@ public:
 	static double Overprovisioning_Ratio;//The ratio of spare space with respect to the whole available storage space of SSD
 	static double GC_Exec_Threshold;//The threshold for the ratio of free pages that used to trigger GC
 	static SSD_Components::GC_Block_Selection_Policy_Type GC_Block_Selection_Policy;
+	//Only used when GC_Block_Selection_Policy is EXTERNAL. Paths to a pair of
+	//named pipes created by the external controller before MQSim starts:
+	//MQSim writes the GC decision state to the first and reads the chosen
+	//action from the second, once per GC decision.
+	static std::string External_GC_State_Pipe_Path;
+	static std::string External_GC_Action_Pipe_Path;
 	static bool Use_Copyback_for_GC;
 	static bool Preemptible_GC_Enabled;
 	static double GC_Hard_Threshold;//The hard gc execution threshold, used to stop preemptible gc execution

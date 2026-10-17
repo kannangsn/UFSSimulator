@@ -32,6 +32,8 @@ SSD_Components::Flash_Scheduling_Type Device_Parameter_Set::Transaction_Scheduli
 double Device_Parameter_Set::Overprovisioning_Ratio = 0.07;//The ratio of spare space with respect to the whole available storage space of SSD
 double Device_Parameter_Set::GC_Exec_Threshold = 0.05;//The threshold for the ratio of free pages that used to trigger GC
 SSD_Components::GC_Block_Selection_Policy_Type Device_Parameter_Set::GC_Block_Selection_Policy = SSD_Components::GC_Block_Selection_Policy_Type::RGA;
+std::string Device_Parameter_Set::External_GC_State_Pipe_Path = "";
+std::string Device_Parameter_Set::External_GC_Action_Pipe_Path = "";
 bool Device_Parameter_Set::Use_Copyback_for_GC = false;
 bool Device_Parameter_Set::Preemptible_GC_Enabled = true;
 double Device_Parameter_Set::GC_Hard_Threshold = 0.005;//The hard gc execution threshold, used to stop preemptible gc execution
@@ -330,11 +332,20 @@ void Device_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 		case SSD_Components::GC_Block_Selection_Policy_Type::FIFO:
 			val = "FIFO";
 			break;
+		case SSD_Components::GC_Block_Selection_Policy_Type::EXTERNAL:
+			val = "EXTERNAL";
+			break;
 		default:
 			break;
 	}
 	xmlwriter.Write_attribute_string(attr, val);
-	
+
+	attr = "External_GC_State_Pipe_Path";
+	xmlwriter.Write_attribute_string(attr, External_GC_State_Pipe_Path);
+
+	attr = "External_GC_Action_Pipe_Path";
+	xmlwriter.Write_attribute_string(attr, External_GC_Action_Pipe_Path);
+
 	attr = "Use_Copyback_for_GC";
 	val = (Use_Copyback_for_GC ? "true" : "false");
 	xmlwriter.Write_attribute_string(attr, val);
@@ -626,9 +637,15 @@ void Device_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 					GC_Block_Selection_Policy = SSD_Components::GC_Block_Selection_Policy_Type::RANDOM_PP;
 				} else if (strcmp(val.c_str(), "FIFO") == 0) {
 					GC_Block_Selection_Policy = SSD_Components::GC_Block_Selection_Policy_Type::FIFO;
+				} else if (strcmp(val.c_str(), "EXTERNAL") == 0) {
+					GC_Block_Selection_Policy = SSD_Components::GC_Block_Selection_Policy_Type::EXTERNAL;
 				} else {
 					PRINT_ERROR("Unknown GC block selection policy specified in the SSD configuration file")
 				}
+			} else if (strcmp(param->name(), "External_GC_State_Pipe_Path") == 0) {
+				External_GC_State_Pipe_Path = param->value();
+			} else if (strcmp(param->name(), "External_GC_Action_Pipe_Path") == 0) {
+				External_GC_Action_Pipe_Path = param->value();
 			} else if (strcmp(param->name(), "Use_Copyback_for_GC") == 0) {
 					std::string val = param->value();
 					std::transform(val.begin(), val.end(), val.begin(), ::toupper);
