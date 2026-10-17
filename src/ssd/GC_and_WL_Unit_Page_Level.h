@@ -45,11 +45,8 @@ namespace SSD_Components
 		//Opens Device_Parameter_Set::External_GC_State_Pipe_Path/
 		//External_GC_Action_Pipe_Path on first use, writes the current
 		//decision state, blocks for one line back, and returns it parsed
-		//as an action index into {GREEDY, RGA, RANDOM, RANDOM_P, FIFO}.
-		//RANDOM_PP is left out of this set. It used to crash on a
-		//write-completion race that is fixed now, so nothing currently
-		//blocks adding it; whether to actually add it is a separate, open
-		//question.
+		//as an action index into {GREEDY, RGA, RANDOM, RANDOM_P, FIFO,
+		//RANDOM_PP}.
 		//Raw POSIX file descriptors, not std::ofstream/ifstream: libc++'s
 		//filebuf buffering on a FIFO silently never saw data a peer had
 		//already written, confirmed by direct testing. Read/write

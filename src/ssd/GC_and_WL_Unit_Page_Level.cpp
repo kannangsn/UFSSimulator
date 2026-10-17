@@ -94,13 +94,14 @@ namespace SSD_Components
 						case 2: gc_candidate_block_id = Select_Block_RANDOM(pbke); break;
 						case 3: gc_candidate_block_id = Select_Block_RANDOM_P(pbke); break;
 						case 4: gc_candidate_block_id = Select_Block_FIFO(pbke); break;
+						case 5: gc_candidate_block_id = Select_Block_RANDOM_PP(pbke); break;
 						default:
-							PRINT_ERROR("External GC controller returned an action index outside 0..4")
+							PRINT_ERROR("External GC controller returned an action index outside 0..5")
 					}
 					//GREEDY and RGA always return a candidate by construction.
-					//RANDOM, RANDOM_P, and FIFO can come back empty, same as
-					//in their own case above: skip this GC opportunity rather
-					//than erasing an unvalidated block.
+					//RANDOM, RANDOM_P, FIFO, and RANDOM_PP can come back empty,
+					//same as in their own case above: skip this GC opportunity
+					//rather than erasing an unvalidated block.
 					if (gc_candidate_block_id == block_no_per_plane) {
 						return;
 					}
