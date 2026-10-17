@@ -50,6 +50,22 @@ the commit before the fix in plan.md section 8 item 11, it crashes partway
 through with the same "Inconsistency in the global mapping table when
 locking an LPA!" error RANDOM_PP always hit.
 
+## Checking the preconditioning RANDOM_UNIFORM crash
+
+```
+./tests/preconditioning_random_uniform/run_test.sh
+```
+
+`Enabled_Preconditioning=true` with the `RANDOM_UNIFORM` address
+distribution used to crash with a SIGSEGV during preconditioning. This
+script builds MQSim and runs it against the device and workload that
+crashed deterministically, checking for a clean exit. Slow on purpose:
+preconditioning alone takes a couple of minutes on a device this size, so
+it isn't part of the fast default suite and needs running deliberately.
+Confirmed to catch the regression: run against the commit before the fix
+in plan.md section 8 item 6, it exits 139 (SIGSEGV) partway through
+preconditioning.
+
 ## Running the UFS unit/integration tests
 
 ```

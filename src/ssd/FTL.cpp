@@ -728,22 +728,31 @@ namespace SSD_Components
 					}
 					case Utils::Address_Distribution_Type::RANDOM_UNIFORM:
 					{
-						int random_walker = int(random_generator.Uniform(0, uint32_t(trace_lpas_sorted_histogram.size()) - 2));
-						int random_step = random_generator.Uniform_uint(0, (uint32_t)(trace_lpas_sorted_histogram.size()) / no_of_entries_in_cmt);
-						auto itr = trace_lpas_sorted_histogram.begin();
-						while (Address_Mapping_Unit->Get_current_cmt_occupancy_for_stream(stat->Stream_id) < no_of_entries_in_cmt) {
-							std::advance(itr, random_step);
-							Address_Mapping_Unit->Bring_to_CMT_for_preconditioning(stat->Stream_id, (*itr).second);
-							if (trace_lpas_sorted_histogram.size() > 1) {
-								trace_lpas_sorted_histogram.erase(itr++);
-								if (random_walker + random_step >= int(trace_lpas_sorted_histogram.size() - 1) || random_walker + random_step < 0) {
-									random_step *= -1;
-								}
-								random_walker += random_step;
-							} else {
-								trace_lpas_sorted_histogram.erase(itr);
-								break;
-							}
+						//The original code advanced a multimap iterator by a
+						//step computed once from the histogram's starting
+						//size, but the histogram shrinks by one entry every
+						//iteration, so a fixed step size can exceed the
+						//entries actually remaining in either direction,
+						//advancing the iterator past begin()/end(), undefined
+						//behavior. Confirmed to crash this way (SIGSEGV
+						//inside std::advance).
+						//Fixed by moving the entries into a vector first:
+						//O(1) random access and O(1) removal (swap with the
+						//last element, then shrink), instead of repeatedly
+						//advancing a multimap iterator from begin(), which
+						//would be at least O(n) per pick on a large device.
+						std::vector<LPA_type> remaining_lpas;
+						remaining_lpas.reserve(trace_lpas_sorted_histogram.size());
+						for (auto &entry : trace_lpas_sorted_histogram) {
+							remaining_lpas.push_back(entry.second);
+						}
+						trace_lpas_sorted_histogram.clear();
+						while (Address_Mapping_Unit->Get_current_cmt_occupancy_for_stream(stat->Stream_id) < no_of_entries_in_cmt
+							&& !remaining_lpas.empty()) {
+							unsigned int random_index = random_generator.Uniform_uint(0, (uint32_t)remaining_lpas.size() - 1);
+							Address_Mapping_Unit->Bring_to_CMT_for_preconditioning(stat->Stream_id, remaining_lpas[random_index]);
+							remaining_lpas[random_index] = remaining_lpas.back();
+							remaining_lpas.pop_back();
 						}
 						break;
 					}
