@@ -36,6 +36,24 @@ log) if any run exits non-zero. Switching the action every decision is deliberat
 what makes the race described in plan.md section 8 item 9 likely enough to
 hit, and is how that race was originally found.
 
+## Checking the GREEDY read-heavy crash
+
+```
+./tests/greedy_read_heavy_crash/run_test.sh
+```
+
+`GREEDY` used to crash a read-heavy workload's one GC decision opportunity,
+with no live hook or pipes involved. `Select_Block_GREEDY` seeded its
+candidate with block 0 (or block 1) and never validated that default against
+`is_safe_gc_wl_candidate`, only ever validating a block that replaced it.
+On a workload this read-heavy, nothing replaces it, so the untested default
+got returned, still carrying an unfinished GC write reservation. This script
+just builds MQSim and runs it natively with `GC_Block_Selection_Policy=GREEDY`
+against a read-heavy workload, checking for a clean exit. Confirmed to catch
+the regression: run against the commit before the fix in plan.md section 8
+item 14, it crashes with "Inconsistency in the global mapping table when
+locking an LPA!".
+
 ## Checking the GC write-completion race (RANDOM_PP)
 
 ```

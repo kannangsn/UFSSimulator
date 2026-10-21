@@ -57,6 +57,9 @@ namespace SSD_Components
 			switch (block_selection_policy) {
 				case SSD_Components::GC_Block_Selection_Policy_Type::GREEDY:
 					gc_candidate_block_id = Select_Block_GREEDY(pbke);
+					if (gc_candidate_block_id == block_no_per_plane) {
+						return;
+					}
 					break;
 				case SSD_Components::GC_Block_Selection_Policy_Type::RGA:
 					gc_candidate_block_id = Select_Block_RGA(pbke);
@@ -98,10 +101,12 @@ namespace SSD_Components
 						default:
 							PRINT_ERROR("External GC controller returned an action index outside 0..5")
 					}
-					//GREEDY and RGA always return a candidate by construction.
-					//RANDOM, RANDOM_P, FIFO, and RANDOM_PP can come back empty,
-					//same as in their own case above: skip this GC opportunity
-					//rather than erasing an unvalidated block.
+					//RGA always returns a candidate by construction (every
+					//member of its random_set is already validated before
+					//being added). GREEDY, RANDOM, RANDOM_P, FIFO, and
+					//RANDOM_PP can all come back empty, same as in their own
+					//case above: skip this GC opportunity rather than
+					//erasing an unvalidated block.
 					if (gc_candidate_block_id == block_no_per_plane) {
 						return;
 					}
@@ -173,18 +178,30 @@ namespace SSD_Components
 
 	flash_block_ID_type GC_and_WL_Unit_Page_Level::Select_Block_GREEDY(PlaneBookKeepingType* pbke)
 	{
-		//Find the set of blocks with maximum number of invalid pages and no free pages
-		flash_block_ID_type gc_candidate_block_id = 0;
-		if (pbke->Ongoing_erase_operations.find(0) != pbke->Ongoing_erase_operations.end()) {
-			gc_candidate_block_id++;
-		}
-		for (flash_block_ID_type block_id = 1; block_id < block_no_per_plane; block_id++) {
-			if (pbke->Blocks[block_id].Invalid_page_count > pbke->Blocks[gc_candidate_block_id].Invalid_page_count
-				&& pbke->Blocks[block_id].Current_page_write_index == pages_no_per_block
-				&& is_safe_gc_wl_candidate(pbke, block_id)) {
+		//Find the fully written block (no free pages left) with the most
+		//invalid pages, only among blocks that are actually safe to erase.
+		//The old version seeded gc_candidate_block_id with block 0 (or
+		//block 1, only checking that one block for an ongoing erase) and
+		//never validated it any further, so it could be returned untested
+		//if no other block ever beat it on invalid-page count. That
+		//candidate could still have one of the races is_safe_gc_wl_candidate
+		//exists to catch, such as an outstanding GC write reservation that
+		//has not actually finished yet, see plan.md section 8 items 9-11
+		//and 14. Every block considered here, including what used to be the
+		//untested default, now goes through the same check every other
+		//selection policy already applies.
+		flash_block_ID_type gc_candidate_block_id = block_no_per_plane;
+		for (flash_block_ID_type block_id = 0; block_id < block_no_per_plane; block_id++) {
+			if (pbke->Blocks[block_id].Current_page_write_index == pages_no_per_block
+				&& is_safe_gc_wl_candidate(pbke, block_id)
+				&& (gc_candidate_block_id == block_no_per_plane
+					|| pbke->Blocks[block_id].Invalid_page_count > pbke->Blocks[gc_candidate_block_id].Invalid_page_count)) {
 				gc_candidate_block_id = block_id;
 			}
 		}
+		//No safe candidate was found, same "none found" sentinel the other
+		//selection policies already use, the caller already knows to skip
+		//this GC opportunity rather than erase an unvalidated block.
 		return gc_candidate_block_id;
 	}
 

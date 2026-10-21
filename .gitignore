@@ -1,6 +1,8 @@
 /MQSim
 /build/
 
+.DS_Store
+
 /workload_scenario_*.xml
 *_scenario_*.xml
 !/tests/regression/golden/*_scenario_*.xml
