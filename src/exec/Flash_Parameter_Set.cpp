@@ -19,6 +19,7 @@ unsigned int Flash_Parameter_Set::Die_No_Per_Chip = 2;
 unsigned int Flash_Parameter_Set::Plane_No_Per_Die = 2;
 unsigned int Flash_Parameter_Set::Block_No_Per_Plane = 2048;
 unsigned int Flash_Parameter_Set::Page_No_Per_Block = 256;//Page no per block
+unsigned int Flash_Parameter_Set::SLC_Block_Count_Per_Plane = 0;
 unsigned int Flash_Parameter_Set::Page_Capacity = 8192;//Flash page capacity in bytes
 unsigned int Flash_Parameter_Set::Page_Metadat_Capacity = 1872;//Flash page capacity in bytes
 
@@ -120,6 +121,10 @@ void Flash_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 	val = std::to_string(Page_No_Per_Block);
 	xmlwriter.Write_attribute_string(attr, val);
 
+	attr = "SLC_Block_Count_Per_Plane";
+	val = std::to_string(SLC_Block_Count_Per_Plane);
+	xmlwriter.Write_attribute_string(attr, val);
+
 	attr = "Page_Capacity";
 	val = std::to_string(Page_Capacity);
 	xmlwriter.Write_attribute_string(attr, val);
@@ -201,6 +206,9 @@ void Flash_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 			} else if (strcmp(param->name(), "Page_No_Per_Block") == 0) {
 				std::string val = param->value();
 				Page_No_Per_Block = std::stoul(val);
+			} else if (strcmp(param->name(), "SLC_Block_Count_Per_Plane") == 0) {
+				std::string val = param->value();
+				SLC_Block_Count_Per_Plane = std::stoul(val);
 			} else if (strcmp(param->name(), "Page_Capacity") == 0) {
 				std::string val = param->value();
 				Page_Capacity = std::stoul(val);

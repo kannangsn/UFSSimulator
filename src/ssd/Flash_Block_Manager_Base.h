@@ -31,6 +31,13 @@ namespace SSD_Components
 	public:
 		flash_block_ID_type BlockID;
 		flash_page_ID_type Current_page_write_index;
+		//How many pages this specific block can actually be written to
+		//before it counts as full, independent of any other block in the
+		//plane. Equal to the plane's own pages_no_per_block for a TLC/base
+		//block, smaller for an SLC block (see Flash_Block_Manager_Base's
+		//constructor). Set once at construction, static for now: nothing
+		//converts a block from one technology to another yet.
+		flash_page_ID_type Usable_Page_Count;
 		Block_Service_Status Current_status;
 		unsigned int Invalid_page_count;
 		unsigned int Erase_count;
@@ -88,7 +95,7 @@ namespace SSD_Components
 	public:
 		Flash_Block_Manager_Base(GC_and_WL_Unit_Base* gc_and_wl_unit, unsigned int max_allowed_block_erase_count, unsigned int total_concurrent_streams_no,
 			unsigned int channel_count, unsigned int chip_no_per_channel, unsigned int die_no_per_chip, unsigned int plane_no_per_die,
-			unsigned int block_no_per_plane, unsigned int page_no_per_block);
+			unsigned int block_no_per_plane, unsigned int page_no_per_block, unsigned int slc_block_count_per_plane = 0);
 		virtual ~Flash_Block_Manager_Base();
 		virtual void Allocate_block_and_page_in_plane_for_user_write(const stream_id_type streamID, NVM::FlashMemory::Physical_Page_Address& address) = 0;
 		virtual void Allocate_block_and_page_in_plane_for_gc_write(const stream_id_type streamID, NVM::FlashMemory::Physical_Page_Address& address) = 0;

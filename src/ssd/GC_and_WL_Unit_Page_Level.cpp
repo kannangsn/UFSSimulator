@@ -180,6 +180,12 @@ namespace SSD_Components
 	{
 		//Find the fully written block (no free pages left) with the most
 		//invalid pages, only among blocks that are actually safe to erase.
+		//"Fully written" is checked against this block's own
+		//Usable_Page_Count, not the plane's shared pages_no_per_block: an
+		//SLC block's write frontier retires at a smaller count (see
+		//Flash_Block_Manager.cpp), so comparing against the shared value
+		//here would make an SLC block permanently ineligible for GC, never
+		//reaching pages_no_per_block.
 		//The old version seeded gc_candidate_block_id with block 0 (or
 		//block 1, only checking that one block for an ongoing erase) and
 		//never validated it any further, so it could be returned untested
@@ -192,7 +198,7 @@ namespace SSD_Components
 		//selection policy already applies.
 		flash_block_ID_type gc_candidate_block_id = block_no_per_plane;
 		for (flash_block_ID_type block_id = 0; block_id < block_no_per_plane; block_id++) {
-			if (pbke->Blocks[block_id].Current_page_write_index == pages_no_per_block
+			if (pbke->Blocks[block_id].Current_page_write_index == pbke->Blocks[block_id].Usable_Page_Count
 				&& is_safe_gc_wl_candidate(pbke, block_id)
 				&& (gc_candidate_block_id == block_no_per_plane
 					|| pbke->Blocks[block_id].Invalid_page_count > pbke->Blocks[gc_candidate_block_id].Invalid_page_count)) {
@@ -218,7 +224,7 @@ namespace SSD_Components
 		flash_block_ID_type gc_candidate_block_id = *random_set.begin();
 		for (auto &block_id : random_set) {
 			if (pbke->Blocks[block_id].Invalid_page_count > pbke->Blocks[gc_candidate_block_id].Invalid_page_count
-				&& pbke->Blocks[block_id].Current_page_write_index == pages_no_per_block) {
+				&& pbke->Blocks[block_id].Current_page_write_index == pbke->Blocks[block_id].Usable_Page_Count) {
 				gc_candidate_block_id = block_id;
 			}
 		}
@@ -248,12 +254,12 @@ namespace SSD_Components
 		unsigned int repeat = 0;
 
 		//A write frontier block or a block with free pages should not be selected for garbage collection
-		while ((pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block || !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id))
+		while ((pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pbke->Blocks[gc_candidate_block_id].Usable_Page_Count || !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id))
 			&& repeat++ < block_no_per_plane) {
 			gc_candidate_block_id = random_generator.Uniform_uint(0, block_no_per_plane - 1);
 		}
 		//No safe candidate was found within the retry budget, see Select_Block_RANDOM.
-		if (pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block || !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id)) {
+		if (pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pbke->Blocks[gc_candidate_block_id].Usable_Page_Count || !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id)) {
 			return block_no_per_plane;
 		}
 		return gc_candidate_block_id;
@@ -265,14 +271,14 @@ namespace SSD_Components
 		unsigned int repeat = 0;
 
 		//The selected gc block should have a minimum number of invalid pages
-		while ((pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block
+		while ((pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pbke->Blocks[gc_candidate_block_id].Usable_Page_Count
 			|| pbke->Blocks[gc_candidate_block_id].Invalid_page_count < random_pp_threshold
 			|| !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id))
 			&& repeat++ < block_no_per_plane) {
 			gc_candidate_block_id = random_generator.Uniform_uint(0, block_no_per_plane - 1);
 		}
 		//No safe candidate was found within the retry budget, see Select_Block_RANDOM.
-		if (pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pages_no_per_block
+		if (pbke->Blocks[gc_candidate_block_id].Current_page_write_index < pbke->Blocks[gc_candidate_block_id].Usable_Page_Count
 			|| pbke->Blocks[gc_candidate_block_id].Invalid_page_count < random_pp_threshold
 			|| !is_safe_gc_wl_candidate(pbke, gc_candidate_block_id)) {
 			return block_no_per_plane;

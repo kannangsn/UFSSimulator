@@ -6,11 +6,24 @@ namespace SSD_Components
 	unsigned int Block_Pool_Slot_Type::Page_vector_size = 0;
 	Flash_Block_Manager_Base::Flash_Block_Manager_Base(GC_and_WL_Unit_Base* gc_and_wl_unit, unsigned int max_allowed_block_erase_count, unsigned int total_concurrent_streams_no,
 		unsigned int channel_count, unsigned int chip_no_per_channel, unsigned int die_no_per_chip, unsigned int plane_no_per_die,
-		unsigned int block_no_per_plane, unsigned int page_no_per_block)
+		unsigned int block_no_per_plane, unsigned int page_no_per_block, unsigned int slc_block_count_per_plane)
 		: gc_and_wl_unit(gc_and_wl_unit), max_allowed_block_erase_count(max_allowed_block_erase_count), total_concurrent_streams_no(total_concurrent_streams_no),
 		channel_count(channel_count), chip_no_per_channel(chip_no_per_channel), die_no_per_chip(die_no_per_chip), plane_no_per_die(plane_no_per_die),
 		block_no_per_plane(block_no_per_plane), pages_no_per_block(page_no_per_block)
 	{
+		//An SLC block holds 1 bit per cell against the base technology's
+		//3 (TLC) or 2 (MLC) on the same physical wordlines, so it has fewer
+		//usable pages. Matches configs/gc/variants/slc_ssdconfig.xml's own
+		//whole-device derivation (Page_No_Per_Block 256 -> 85).
+		unsigned int slc_usable_page_count = pages_no_per_block / 3;
+		//Plane-wide totals have to be the sum of each block's own usable
+		//page count, not block_no_per_plane * pages_no_per_block uniformly,
+		//once some blocks are SLC: Check_bookkeeping_correctness enforces
+		//Total_pages_count == Free + Valid + Invalid, so an uncorrected
+		//total here would make that invariant fail as soon as an SLC
+		//block's write frontier actually stops short of pages_no_per_block.
+		unsigned int total_pages_per_plane = slc_block_count_per_plane * slc_usable_page_count
+			+ (block_no_per_plane - slc_block_count_per_plane) * pages_no_per_block;
 		plane_manager = new PlaneBookKeepingType***[channel_count];
 		for (unsigned int channelID = 0; channelID < channel_count; channelID++) {
 			plane_manager[channelID] = new PlaneBookKeepingType**[chip_no_per_channel];
@@ -21,8 +34,8 @@ namespace SSD_Components
 
 					//Initialize plane book keeping data structure
 					for (unsigned int planeID = 0; planeID < plane_no_per_die; planeID++) {
-						plane_manager[channelID][chipID][dieID][planeID].Total_pages_count = block_no_per_plane * pages_no_per_block;
-						plane_manager[channelID][chipID][dieID][planeID].Free_pages_count = block_no_per_plane * pages_no_per_block;
+						plane_manager[channelID][chipID][dieID][planeID].Total_pages_count = total_pages_per_plane;
+						plane_manager[channelID][chipID][dieID][planeID].Free_pages_count = total_pages_per_plane;
 						plane_manager[channelID][chipID][dieID][planeID].Valid_pages_count = 0;
 						plane_manager[channelID][chipID][dieID][planeID].Invalid_pages_count = 0;
 						plane_manager[channelID][chipID][dieID][planeID].Ongoing_erase_operations.clear();
@@ -31,6 +44,13 @@ namespace SSD_Components
 						//Initialize block pool for plane
 						for (unsigned int blockID = 0; blockID < block_no_per_plane; blockID++) {
 							plane_manager[channelID][chipID][dieID][planeID].Blocks[blockID].BlockID = blockID;
+							//The first slc_block_count_per_plane block IDs in
+							//every plane are the fixed SLC region, matching
+							//Plane's own per-block Flash_Technology_Type
+							//assignment (NVM::FlashMemory::Plane.cpp), so the
+							//two layers agree on which blocks are SLC.
+							plane_manager[channelID][chipID][dieID][planeID].Blocks[blockID].Usable_Page_Count =
+								(blockID < slc_block_count_per_plane) ? slc_usable_page_count : pages_no_per_block;
 							plane_manager[channelID][chipID][dieID][planeID].Blocks[blockID].Current_page_write_index = 0;
 							plane_manager[channelID][chipID][dieID][planeID].Blocks[blockID].Current_status = Block_Service_Status::IDLE;
 							plane_manager[channelID][chipID][dieID][planeID].Blocks[blockID].Invalid_page_count = 0;

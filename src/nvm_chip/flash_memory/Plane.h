@@ -13,7 +13,7 @@ namespace NVM
 		class Plane
 		{
 		public:
-			Plane(unsigned int BlocksNoPerPlane, unsigned int PagesNoPerBlock);
+			Plane(unsigned int BlocksNoPerPlane, unsigned int PagesNoPerBlock, Flash_Technology_Type BaseTechnology, unsigned int SLCBlockCount);
 			~Plane();
 			Block** Blocks;
 			unsigned int Healthy_block_no;

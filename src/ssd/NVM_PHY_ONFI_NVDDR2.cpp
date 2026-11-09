@@ -206,7 +206,7 @@ namespace SSD_Components {
 				}
 				chipBKE->OngoingDieCMDTransfers.push(dieBKE);
 
-				dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+				dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].DieID, dieBKE->ActiveCommand->Address[0].PlaneID, dieBKE->ActiveCommand->Address[0].BlockID, dieBKE->ActiveCommand->Address[0].PageID);
 				if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time) {
 					chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
 				}
@@ -242,7 +242,7 @@ namespace SSD_Components {
 					}
 					chipBKE->OngoingDieCMDTransfers.push(dieBKE);
 
-					dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+					dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].DieID, dieBKE->ActiveCommand->Address[0].PlaneID, dieBKE->ActiveCommand->Address[0].BlockID, dieBKE->ActiveCommand->Address[0].PageID);
 					if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time) {
 						chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
 					}
@@ -273,7 +273,7 @@ namespace SSD_Components {
 					}
 					chipBKE->OngoingDieCMDTransfers.push(dieBKE);
 
-					dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+					dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].DieID, dieBKE->ActiveCommand->Address[0].PlaneID, dieBKE->ActiveCommand->Address[0].BlockID, dieBKE->ActiveCommand->Address[0].PageID);
 					if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time) {
 						chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
 					}
@@ -305,7 +305,7 @@ namespace SSD_Components {
 				}
 				chipBKE->OngoingDieCMDTransfers.push(dieBKE);
 
-				dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+				dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].DieID, dieBKE->ActiveCommand->Address[0].PlaneID, dieBKE->ActiveCommand->Address[0].BlockID, dieBKE->ActiveCommand->Address[0].PageID);
 				if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time) {
 					chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
 				}
@@ -454,7 +454,7 @@ namespace SSD_Components {
 			waitingChipBKE->OngoingDieCMDTransfers.push(waitingBKE);
 
 			waitingBKE->Expected_finish_time = Simulator->Time() + this->channels[channel_id]->ProgramCommandTime[waitingBKE->ActiveTransactions.size()]
-				+ targetChip->Get_command_execution_latency(waitingBKE->ActiveCommand->CommandCode, waitingBKE->ActiveCommand->Address[0].PageID);
+				+ targetChip->Get_command_execution_latency(waitingBKE->ActiveCommand->CommandCode, waitingBKE->ActiveCommand->Address[0].DieID, waitingBKE->ActiveCommand->Address[0].PlaneID, waitingBKE->ActiveCommand->Address[0].BlockID, waitingBKE->ActiveCommand->Address[0].PageID);
 			if (waitingChipBKE->Expected_command_exec_finish_time < waitingBKE->Expected_finish_time) {
 				waitingChipBKE->Expected_command_exec_finish_time = waitingBKE->Expected_finish_time;
 			}
@@ -558,7 +558,7 @@ namespace SSD_Components {
 				_my_instance->channels[chip->ChannelID]->SetStatus(BusChannelStatus::BUSY, chip);
 
 				dieBKE->Expected_finish_time = Simulator->Time() + _my_instance->channels[chip->ChannelID]->ProgramCommandTime[dieBKE->ActiveTransactions.size()]
-					+ chip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+					+ chip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].DieID, dieBKE->ActiveCommand->Address[0].PlaneID, dieBKE->ActiveCommand->Address[0].BlockID, dieBKE->ActiveCommand->Address[0].PageID);
 				if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time)
 					chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
 #if 0	

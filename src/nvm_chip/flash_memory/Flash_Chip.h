@@ -22,11 +22,12 @@ namespace NVM
 			enum class Chip_Sim_Event_Type { COMMAND_FINISHED };
 		public:
 			Flash_Chip(const sim_object_id_type&, flash_channel_ID_type channelID, flash_chip_ID_type localChipID,
-				Flash_Technology_Type flash_technology, 
+				Flash_Technology_Type flash_technology,
 				unsigned int dieNo, unsigned int PlaneNoPerDie, unsigned int Block_no_per_plane, unsigned int Page_no_per_block,
 				sim_time_type *readLatency, sim_time_type *programLatency, sim_time_type eraseLatency,
 				sim_time_type suspendProgramLatency, sim_time_type suspendEraseLatency,
-				sim_time_type commProtocolDelayRead = 20, sim_time_type commProtocolDelayWrite = 0, sim_time_type commProtocolDelayErase = 0);
+				sim_time_type commProtocolDelayRead = 20, sim_time_type commProtocolDelayWrite = 0, sim_time_type commProtocolDelayErase = 0,
+				unsigned int SLC_block_count_per_plane = 0);
 			~Flash_Chip();
 			flash_channel_ID_type ChannelID;
 			flash_chip_ID_type ChipID;         //Flashchip position in its related channel
@@ -82,12 +83,24 @@ namespace NVM
 			typedef void(*ChipReadySignalHandlerType) (Flash_Chip* targetChip, Flash_Command* command);
 			void Connect_to_chip_ready_signal(ChipReadySignalHandlerType);
 			
-			sim_time_type Get_command_execution_latency(command_code_type CMDCode, flash_page_ID_type pageID)
+			sim_time_type Get_command_execution_latency(command_code_type CMDCode, flash_die_ID_type dieID, flash_plane_ID_type planeID, flash_block_ID_type blockID, flash_page_ID_type pageID)
 			{
+				//Latency depends on this specific block's own technology, not
+				//the chip-wide field: a block's technology can differ from
+				//the chip's base/majority one (see Plane's SLC_block_count).
+				//The shared _readLatency/_programLatency arrays stay valid
+				//for every technology regardless: they hold the underlying
+				//NAND cells' own per-tier voltage-window latencies, sized for
+				//the chip's base technology (the widest tier count any block
+				//here uses), and a block running a narrower technology than
+				//the base only ever indexes into the tiers it actually uses
+				//(e.g. SLC always resolves to tier 0, the fastest, valid in
+				//an array sized for MLC or TLC too).
+				Flash_Technology_Type block_technology = Dies[dieID]->Planes[planeID]->Blocks[blockID]->Technology;
 				int latencyType = 0;
-				if (flash_technology == Flash_Technology_Type::MLC) {
+				if (block_technology == Flash_Technology_Type::MLC) {
 					latencyType = pageID % 2;
-				} else if (flash_technology == Flash_Technology_Type::TLC) {
+				} else if (block_technology == Flash_Technology_Type::TLC) {
 					//From: Yaakobi et al., "Characterization and Error-Correcting Codes for TLC Flash Memories", ICNC 2012
 					latencyType = (pageID <= 5) ? 0 : ((pageID <= 7) ? 1 : (((pageID - 8) >> 1) % 3));;
 				}

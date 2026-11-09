@@ -48,11 +48,22 @@ namespace Utils
 		unsigned int channel_count, unsigned int chip_no_per_channel, unsigned int die_no_per_chip, unsigned int plane_no_per_die,
 		std::vector<std::vector<flash_channel_ID_type>> stream_channel_ids, std::vector<std::vector<flash_chip_ID_type>> stream_chip_ids,
 		std::vector<std::vector<flash_die_ID_type>> stream_die_ids, std::vector<std::vector<flash_plane_ID_type>> stream_plane_ids,
-		unsigned int block_no_per_plane, unsigned int page_no_per_block, unsigned int sector_no_per_page, double overprovisioning_ratio) 
+		unsigned int block_no_per_plane, unsigned int page_no_per_block, unsigned int sector_no_per_page, double overprovisioning_ratio,
+		unsigned int slc_block_count_per_plane)
 	{
 		if (initialized) {
 			return;
 		}
+
+		//An SLC block holds fewer usable pages than a base-technology one
+		//(Flash_Block_Manager_Base.cpp has the same derivation and the same
+		//reasoning), so the plane's total usable page count is the sum of
+		//each block's own count, not block_no_per_plane * page_no_per_block
+		//uniformly, once some blocks are SLC. Falls back to exactly that
+		//product when slc_block_count_per_plane is 0, current implementation's default.
+		unsigned int slc_usable_page_count = page_no_per_block / 3;
+		unsigned int effective_pages_per_plane = slc_block_count_per_plane * slc_usable_page_count
+			+ (block_no_per_plane - slc_block_count_per_plane) * page_no_per_block;
 		
 		Logical_Address_Partitioning_Unit::hostinterface_type = hostinterface_type;
 
@@ -138,7 +149,7 @@ namespace Utils
 				for (flash_chip_ID_type chip_id = 0; chip_id < stream_chip_ids[stream_id].size(); chip_id++) {
 					for (flash_die_ID_type die_id = 0; die_id < stream_die_ids[stream_id].size(); die_id++) {
 						for (flash_plane_ID_type plane_id = 0; plane_id < stream_plane_ids[stream_id].size(); plane_id++) {
-							lsa_count += (LHA_type)((block_no_per_plane * page_no_per_block * sector_no_per_page * (1.0 - overprovisioning_ratio) *
+							lsa_count += (LHA_type)((effective_pages_per_plane * sector_no_per_page * (1.0 - overprovisioning_ratio) *
 								1.0 / double(resource_list[stream_channel_ids[stream_id][channel_id]][stream_chip_ids[stream_id][chip_id]][stream_die_ids[stream_id][die_id]][stream_plane_ids[stream_id][plane_id]])));
 						}
 					}

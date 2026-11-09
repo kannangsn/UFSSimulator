@@ -27,6 +27,14 @@ namespace SSD_Components
 		if (block_pool_gc_hard_threshold < 1) {
 			block_pool_gc_hard_threshold = 1;
 		}
+		//A single global threshold, against the base technology's page
+		//count, same as before per-block SLC/TLC mixing existed. An SLC
+		//block's own smaller Usable_Page_Count means it can never reach
+		//this many invalid pages, so RANDOM_PP effectively never selects
+		//an SLC block as things stand. Not fixed here: a per-block-relative
+		//threshold is a real refinement, not needed for GREEDY/RGA/RANDOM/
+		//RANDOM_P, the policies this project's own GC regression suite
+		//actually exercises against SLC/TLC mixing.
 		random_pp_threshold = (unsigned int)(rho * pages_no_per_block);
 		if (block_pool_gc_threshold < max_ongoing_gc_reqs_per_plane) {
 			block_pool_gc_threshold = max_ongoing_gc_reqs_per_plane;

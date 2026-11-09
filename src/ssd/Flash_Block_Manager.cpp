@@ -7,9 +7,9 @@ namespace SSD_Components
 {
 	Flash_Block_Manager::Flash_Block_Manager(GC_and_WL_Unit_Base* gc_and_wl_unit, unsigned int max_allowed_block_erase_count, unsigned int total_concurrent_streams_no,
 		unsigned int channel_count, unsigned int chip_no_per_channel, unsigned int die_no_per_chip, unsigned int plane_no_per_die,
-		unsigned int block_no_per_plane, unsigned int page_no_per_block)
+		unsigned int block_no_per_plane, unsigned int page_no_per_block, unsigned int slc_block_count_per_plane)
 		: Flash_Block_Manager_Base(gc_and_wl_unit, max_allowed_block_erase_count, total_concurrent_streams_no, channel_count, chip_no_per_channel, die_no_per_chip,
-			plane_no_per_die, block_no_per_plane, page_no_per_block)
+			plane_no_per_die, block_no_per_plane, page_no_per_block, slc_block_count_per_plane)
 	{
 	}
 
@@ -26,8 +26,11 @@ namespace SSD_Components
 		page_address.PageID = plane_record->Data_wf[stream_id]->Current_page_write_index++;
 		program_transaction_issued(page_address);
 
-		//The current write frontier block is written to the end
-		if(plane_record->Data_wf[stream_id]->Current_page_write_index == pages_no_per_block) {
+		//The current write frontier block is written to the end. Compared
+		//against this specific block's own Usable_Page_Count, not the
+		//plane's shared pages_no_per_block: an SLC block's write frontier
+		//has to retire early, once it hits its own smaller usable capacity.
+		if(plane_record->Data_wf[stream_id]->Current_page_write_index == plane_record->Data_wf[stream_id]->Usable_Page_Count) {
 			//Assign a new write frontier block
 			plane_record->Data_wf[stream_id] = plane_record->Get_a_free_block(stream_id, false);
 			gc_and_wl_unit->Check_gc_required(plane_record->Get_free_block_pool_size(), page_address);
@@ -56,8 +59,9 @@ namespace SSD_Components
 		//once this page's write transaction is actually reported serviced.
 		plane_record->Blocks[page_address.BlockID].Outstanding_gc_write_count++;
 
-		//The current write frontier block is written to the end
-		if (plane_record->GC_wf[stream_id]->Current_page_write_index == pages_no_per_block) {
+		//The current write frontier block is written to the end. Per-block
+		//threshold, see the Data_wf check above for why.
+		if (plane_record->GC_wf[stream_id]->Current_page_write_index == plane_record->GC_wf[stream_id]->Usable_Page_Count) {
 			//Assign a new write frontier block
 			plane_record->GC_wf[stream_id] = plane_record->Get_a_free_block(stream_id, false);
 			gc_and_wl_unit->Check_gc_required(plane_record->Get_free_block_pool_size(), page_address);
@@ -65,6 +69,12 @@ namespace SSD_Components
 		plane_record->Check_bookkeeping_correctness(page_address);
 	}
 	
+	//Not adapted for per-block heterogeneous capacity: still uses the
+	//plane's shared pages_no_per_block rather than a per-block
+	//Usable_Page_Count. Not exercised by this project (Enabled_Preconditioning
+	//is false in every config here, and preconditioning already has a
+	//separate, pre-existing, unrelated SIGSEGV logged against it), so left
+	//as is rather than adapted for a path nothing currently runs.
 	void Flash_Block_Manager::Allocate_Pages_in_block_and_invalidate_remaining_for_preconditioning(const stream_id_type stream_id, const NVM::FlashMemory::Physical_Page_Address& plane_address, std::vector<NVM::FlashMemory::Physical_Page_Address>& page_addresses)
 	{
 		if(page_addresses.size() > pages_no_per_block) {
@@ -108,8 +118,9 @@ namespace SSD_Components
 		page_address.PageID = plane_record->Translation_wf[streamID]->Current_page_write_index++;
 		program_transaction_issued(page_address);
 
-		//The current write frontier block for translation pages is written to the end
-		if (plane_record->Translation_wf[streamID]->Current_page_write_index == pages_no_per_block) {
+		//The current write frontier block for translation pages is written
+		//to the end. Per-block threshold, see the Data_wf check above for why.
+		if (plane_record->Translation_wf[streamID]->Current_page_write_index == plane_record->Translation_wf[streamID]->Usable_Page_Count) {
 			//Assign a new write frontier block
 			plane_record->Translation_wf[streamID] = plane_record->Get_a_free_block(streamID, true);
 			if (!is_for_gc) {

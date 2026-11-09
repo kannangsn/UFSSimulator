@@ -89,7 +89,8 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 																		channel_cntr, chip_cntr, parameters->Flash_Parameters.Flash_Technology, parameters->Flash_Parameters.Die_No_Per_Chip, parameters->Flash_Parameters.Plane_No_Per_Die,
 																		parameters->Flash_Parameters.Block_No_Per_Plane, parameters->Flash_Parameters.Page_No_Per_Block,
 																		read_latencies, write_latencies, parameters->Flash_Parameters.Block_Erase_Latency,
-																		parameters->Flash_Parameters.Suspend_Program_Time, parameters->Flash_Parameters.Suspend_Erase_Time);
+																		parameters->Flash_Parameters.Suspend_Program_Time, parameters->Flash_Parameters.Suspend_Erase_Time,
+																		20, 0, 0, parameters->Flash_Parameters.SLC_Block_Count_Per_Plane);
 					Simulator->AddObject(chips[chip_cntr]); //Each simulation object (a child of MQSimEngine::Sim_Object) should be added to the engine
 				}
 				channels[channel_cntr] = new SSD_Components::ONFI_Channel_NVDDR2(channel_cntr, parameters->Chip_No_Per_Channel,
@@ -185,7 +186,8 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 		fbm = new SSD_Components::Flash_Block_Manager(NULL, parameters->Flash_Parameters.Block_PE_Cycles_Limit,
 													  (unsigned int)io_flows->size(), parameters->Flash_Channel_Count, parameters->Chip_No_Per_Channel,
 													  parameters->Flash_Parameters.Die_No_Per_Chip, parameters->Flash_Parameters.Plane_No_Per_Die,
-													  parameters->Flash_Parameters.Block_No_Per_Plane, parameters->Flash_Parameters.Page_No_Per_Block);
+													  parameters->Flash_Parameters.Block_No_Per_Plane, parameters->Flash_Parameters.Page_No_Per_Block,
+													  parameters->Flash_Parameters.SLC_Block_Count_Per_Plane);
 		ftl->BlockManager = fbm;
 
 		//Step 7: create Address_Mapping_Unit
@@ -269,7 +271,8 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 																					 parameters->Flash_Channel_Count, parameters->Chip_No_Per_Channel, parameters->Flash_Parameters.Die_No_Per_Chip, parameters->Flash_Parameters.Plane_No_Per_Die,
 																					 flow_channel_id_assignments, flow_chip_id_assignments, flow_die_id_assignments, flow_plane_id_assignments,
 																					 parameters->Flash_Parameters.Block_No_Per_Plane, parameters->Flash_Parameters.Page_No_Per_Block,
-																					 parameters->Flash_Parameters.Page_Capacity / SECTOR_SIZE_IN_BYTE, parameters->Overprovisioning_Ratio);
+																					 parameters->Flash_Parameters.Page_Capacity / SECTOR_SIZE_IN_BYTE, parameters->Overprovisioning_Ratio,
+																					 parameters->Flash_Parameters.SLC_Block_Count_Per_Plane);
 		switch (parameters->Address_Mapping)
 		{
 		case SSD_Components::Flash_Address_Mapping_Type::PAGE_LEVEL:

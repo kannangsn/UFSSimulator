@@ -24,6 +24,10 @@ public:
 	static unsigned int Plane_No_Per_Die;
 	static unsigned int Block_No_Per_Plane;
 	static unsigned int Page_No_Per_Block;//Page no per block
+	//How many of each plane's blocks are a fixed SLC region (the rest stay
+	//at Flash_Technology above). 0, the default, means no mixing: every
+	//block is Flash_Technology, exactly the original behavior.
+	static unsigned int SLC_Block_Count_Per_Plane;
 	static unsigned int Page_Capacity;//Flash page capacity in bytes
 	static unsigned int Page_Metadat_Capacity;//Flash page metadata capacity in bytes
 	void XML_serialize(Utils::XmlWriter& xmlwriter);

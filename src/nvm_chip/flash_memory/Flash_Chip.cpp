@@ -12,7 +12,8 @@ namespace NVM
 			unsigned int dieNo, unsigned int PlaneNoPerDie, unsigned int Block_no_per_plane, unsigned int Page_no_per_block,
 			sim_time_type* readLatency, sim_time_type* programLatency, sim_time_type eraseLatency,
 			sim_time_type suspendProgramLatency, sim_time_type suspendEraseLatency,
-			sim_time_type commProtocolDelayRead, sim_time_type commProtocolDelayWrite, sim_time_type commProtocolDelayErase)
+			sim_time_type commProtocolDelayRead, sim_time_type commProtocolDelayWrite, sim_time_type commProtocolDelayErase,
+			unsigned int SLC_block_count_per_plane)
 			: NVM_Chip(id), ChannelID(channelID), ChipID(localChipID), flash_technology(flash_technology),
 			status(Internal_Status::IDLE), die_no(dieNo), plane_no_in_die(PlaneNoPerDie), block_no_in_plane(Block_no_per_plane), page_no_per_block(Page_no_per_block),
 			_RBSignalDelayRead(commProtocolDelayRead), _RBSignalDelayWrite(commProtocolDelayWrite), _RBSignalDelayErase(commProtocolDelayErase),
@@ -34,7 +35,7 @@ namespace NVM
 			idleDieNo = dieNo;
 			Dies = new Die*[dieNo];
 			for (unsigned int dieID = 0; dieID < dieNo; dieID++) {
-				Dies[dieID] = new Die(PlaneNoPerDie, Block_no_per_plane, Page_no_per_block);
+				Dies[dieID] = new Die(PlaneNoPerDie, Block_no_per_plane, Page_no_per_block, flash_technology, SLC_block_count_per_plane);
 			}
 		}
 
@@ -111,7 +112,7 @@ namespace NVM
 				PRINT_ERROR("Flash chip " << ID() << ": executing a flash operation on a busy die!")
 			}
 
-			targetDie->Expected_finish_time = Simulator->Time() + Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
+			targetDie->Expected_finish_time = Simulator->Time() + Get_command_execution_latency(command->CommandCode, command->Address[0].DieID, command->Address[0].PlaneID, command->Address[0].BlockID, command->Address[0].PageID);
 			targetDie->CommandFinishEvent = Simulator->Register_sim_event(targetDie->Expected_finish_time,
 				this, command, static_cast<int>(Chip_Sim_Event_Type::COMMAND_FINISHED));
 			targetDie->CurrentCMD = command;
@@ -131,7 +132,7 @@ namespace NVM
 		{
 			Die* targetDie = Dies[command->Address[0].DieID];
 
-			targetDie->STAT_TotalReadTime += Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
+			targetDie->STAT_TotalReadTime += Get_command_execution_latency(command->CommandCode, command->Address[0].DieID, command->Address[0].PlaneID, command->Address[0].BlockID, command->Address[0].PageID);
 			targetDie->Expected_finish_time = INVALID_TIME;
 			targetDie->CommandFinishEvent = NULL;
 			targetDie->CurrentCMD = NULL;
